@@ -14,6 +14,7 @@ export function Hud() {
   const currentSlot = useGameStore((state) => state.currentSlot)
   const isPointerLocked = useGameStore((state) => state.isPointerLocked)
   const isAiming = useGameStore((state) => state.isAiming)
+  const cameraMode = useGameStore((state) => state.cameraMode)
   const kills = useGameStore((state) => state.kills)
   const leaks = useGameStore((state) => state.leaks)
 
@@ -30,7 +31,7 @@ export function Hud() {
           <div className="rounded-2xl border border-white/15 bg-black/60 px-8 py-5 text-center">
             <p className="text-xl font-bold text-white">点击画面开始操控</p>
             <p className="mt-2 text-sm text-white/65">
-              左键开枪 · 右键开镜 · R 换弹 · 1 / 2 切枪
+              按住左键开枪 · 换枪打出反应 · 右键瞄准 · P 切换人称 · R 换弹
             </p>
           </div>
         </div>
@@ -46,6 +47,7 @@ export function Hud() {
         <HudChip label="基地" value={`${baseHp}`} />
         <HudChip label="击杀" value={String(kills)} />
         <HudChip label="漏防" value={String(leaks)} />
+        <HudChip label="视角" value={cameraMode === 'fps' ? '第一人称' : '第三人称'} />
       </div>
 
       <ReloadHint />

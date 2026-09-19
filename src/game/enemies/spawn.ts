@@ -1,39 +1,42 @@
-import { MAP_SIZE } from '../constants.ts'
+import {
+  ELITE_HP,
+  LEFT_SPAWN,
+  LEFT_WAYPOINTS,
+  NORMAL_HP,
+  RIGHT_SPAWN,
+  RIGHT_WAYPOINTS,
+} from '../map/layout.ts'
+import type { Vec2 } from '../map/layout.ts'
 
 export type EnemyKind = 'zombie' | 'slime'
+export type Lane = 'left' | 'right'
 
 export type EnemySpawn = {
   id: number
   kind: EnemyKind
+  elite: boolean
+  hp: number
+  lane: Lane
   position: [number, number, number]
+  waypoints: Vec2[]
 }
 
 let nextEnemyId = 1
 
 export function createEnemySpawn(kind?: EnemyKind): EnemySpawn {
-  const edge = Math.floor(Math.random() * 4)
-  const spread = (Math.random() - 0.5) * (MAP_SIZE - 24)
-  const dist = MAP_SIZE / 2 - 6
-  let x = 0
-  let z = 0
-  if (edge === 0) {
-    x = spread
-    z = dist
-  } else if (edge === 1) {
-    x = spread
-    z = -dist
-  } else if (edge === 2) {
-    x = dist
-    z = spread
-  } else {
-    x = -dist
-    z = spread
-  }
+  const lane: Lane = Math.random() > 0.5 ? 'left' : 'right'
+  const elite = nextEnemyId % 5 === 0 || Math.random() < 0.14
+  const spawn = lane === 'left' ? LEFT_SPAWN : RIGHT_SPAWN
+  const waypoints = lane === 'left' ? LEFT_WAYPOINTS : RIGHT_WAYPOINTS
 
   return {
     id: nextEnemyId++,
     kind: kind ?? (Math.random() > 0.45 ? 'zombie' : 'slime'),
-    position: [x, 1.3, z],
+    elite,
+    hp: elite ? ELITE_HP : NORMAL_HP,
+    lane,
+    position: [spawn.x, 1.35, spawn.z],
+    waypoints,
   }
 }
 

@@ -1,4 +1,5 @@
 import { MATCH_SECONDS, WEAPON_LIST, getWeapon } from '../data/weapons.ts'
+import { playTheme } from '../game/themeMusic.ts'
 import { formatTime } from '../game/formatTime.ts'
 import { useGameStore } from '../store/gameStore.ts'
 import type { WeaponDef } from '../types/game.ts'
@@ -65,7 +66,7 @@ export function Lobby() {
         <div className="mb-6 text-center">
           <p className="mb-2 text-sm tracking-[0.4em] text-cyan-200/80">ELEMENTAL DEFENSE</p>
           <h1 className="text-5xl font-black text-white">元素防线</h1>
-          <p className="mt-3 text-white/70">选出 2 把武器，守住中间的基地。击杀 +10 分，漏进基地 -10 分。</p>
+          <p className="mt-3 text-white/70">选出 2 把武器，守住 T 形地图底部的大塔。击杀 +10 分，漏进大塔 -10 分。</p>
         </div>
 
         <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-4">
@@ -94,6 +95,7 @@ export function Lobby() {
             type="button"
             onClick={() => {
               if (!startGame()) return
+              playTheme()
               document.querySelector('canvas')?.requestPointerLock()
             }}
             disabled={!canStart}
@@ -107,7 +109,7 @@ export function Lobby() {
           </button>
           <p className="text-sm text-white/55">
             {canStart
-              ? '点击后进入战场。左键开枪，右键开镜，R 换弹，1 / 2 切枪。'
+              ? '点击后进入战场。按住左键开枪，换两把枪轮流打可触发元素反应。右键瞄准，P 切换人称。'
               : '请先点选 2 张不同的武器卡片。'}
           </p>
         </div>

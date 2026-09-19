@@ -12,7 +12,7 @@ export function GameCanvas() {
       shadows
       dpr={[1, 1.75]}
       gl={{ antialias: true }}
-      camera={{ fov: 75, position: [0, 10, 18], near: 0.1, far: 200 }}
+      camera={{ fov: 75, position: [0, 48, 20], near: 0.1, far: 320 }}
     >
       <Suspense fallback={null}>
         <Scene />

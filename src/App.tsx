@@ -1,6 +1,7 @@
 import { KeyboardControls } from '@react-three/drei'
 import { GameCanvas } from './game/GameCanvas.tsx'
 import { useGameLoop } from './game/useGameLoop.ts'
+import { useThemeMusic } from './game/useThemeMusic.ts'
 import { useWeaponHotkeys } from './game/useWeaponHotkeys.ts'
 import { GameOver } from './ui/GameOver.tsx'
 import { Hud } from './ui/Hud.tsx'
@@ -17,6 +18,7 @@ const keyMap = [
 export default function App() {
   useGameLoop()
   useWeaponHotkeys()
+  useThemeMusic()
 
   return (
     <KeyboardControls map={keyMap}>

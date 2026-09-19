@@ -3,10 +3,10 @@ import { useFrame } from '@react-three/fiber'
 
 export function LobbyCamera() {
   useFrame((state) => {
-    const t = state.clock.elapsedTime * 0.12
-    state.camera.position.set(Math.sin(t) * 20, 11, Math.cos(t) * 20)
-    state.camera.lookAt(0, 1, 0)
+    const t = state.clock.elapsedTime * 0.08
+    state.camera.position.set(Math.sin(t) * 58, 48, Math.cos(t) * 36 - 8)
+    state.camera.lookAt(0, 1, 4)
   })
 
-  return <PerspectiveCamera makeDefault fov={55} />
+  return <PerspectiveCamera makeDefault fov={50} />
 }

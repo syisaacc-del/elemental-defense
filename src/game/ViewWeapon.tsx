@@ -104,12 +104,12 @@ export function ViewWeapon() {
     switchT.current = Math.min(1, switchT.current + delta * 3.6)
     recoil.current += (0 - recoil.current) * Math.min(1, delta * 10)
 
-    const ads = isAiming && weapon.kind === 'sniper'
+    const ads = isAiming
     const dip = Math.sin(switchT.current * Math.PI) * 0.28
     const reloadDip = current.isReloading ? 0.18 : 0
     const targetX = ads ? 0 : 0.28
     const targetY = (ads ? -0.08 : -0.24) - dip - reloadDip
-    const targetZ = ads ? -0.4 : -0.58
+    const targetZ = ads ? (weapon.kind === 'sniper' ? -0.4 : -0.46) : -0.58
 
     const follow = 1 - Math.exp(-delta * 14)
     local.current.position.x += (targetX - local.current.position.x) * follow

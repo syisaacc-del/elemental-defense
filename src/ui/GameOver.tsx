@@ -1,3 +1,4 @@
+import { stopTheme } from '../game/themeMusic.ts'
 import { useGameStore } from '../store/gameStore.ts'
 
 export function GameOver() {
@@ -28,7 +29,10 @@ export function GameOver() {
 
         <button
           type="button"
-          onClick={() => resetToLobby()}
+          onClick={() => {
+            stopTheme()
+            resetToLobby()
+          }}
           className="mt-8 rounded-full bg-cyan-400 px-8 py-3 text-lg font-bold text-slate-950 hover:bg-cyan-300"
         >
           返回大厅

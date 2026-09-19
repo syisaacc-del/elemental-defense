@@ -48,7 +48,10 @@ export function EnemySpawner() {
           key={enemy.id}
           id={enemy.id}
           kind={enemy.kind}
+          elite={enemy.elite}
+          hp={enemy.hp}
           position={enemy.position}
+          waypoints={enemy.waypoints}
           onRemove={remove}
         />
       ))}

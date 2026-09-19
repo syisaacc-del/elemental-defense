@@ -23,6 +23,7 @@ type GameStore = {
   loadout: [LoadoutWeapon, LoadoutWeapon] | null
   isPointerLocked: boolean
   isAiming: boolean
+  cameraMode: 'fps' | 'tps'
   weaponReadyAt: number
   toggleWeapon: (id: WeaponId) => void
   startGame: () => boolean
@@ -30,6 +31,7 @@ type GameStore = {
   cycleWeapon: () => void
   setPointerLocked: (locked: boolean) => void
   setAiming: (aiming: boolean) => void
+  toggleCameraMode: () => void
   tryFire: (now: number) => FireResult | null
   beginReload: (now: number) => boolean
   completeReloadIfDue: (now: number) => void
@@ -76,6 +78,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   loadout: null,
   isPointerLocked: false,
   isAiming: false,
+  cameraMode: 'fps',
   weaponReadyAt: 0,
 
   toggleWeapon: (id) => {
@@ -108,6 +111,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       currentSlot: 0,
       loadout: [createLoadoutWeapon(first), createLoadoutWeapon(second)],
       isAiming: false,
+      cameraMode: 'fps',
       weaponReadyAt: 0,
       kills: 0,
       leaks: 0,
@@ -136,13 +140,17 @@ export const useGameStore = create<GameStore>((set, get) => ({
   },
 
   setAiming: (aiming) => {
-    const { phase, loadout, currentSlot } = get()
-    if (phase !== 'playing' || !loadout) {
+    const { phase } = get()
+    if (phase !== 'playing') {
       set({ isAiming: false })
       return
     }
-    const weapon = getWeapon(loadout[currentSlot].id)
-    set({ isAiming: aiming && weapon.kind === 'sniper' })
+    set({ isAiming: aiming })
+  },
+
+  toggleCameraMode: () => {
+    if (get().phase !== 'playing') return
+    set({ cameraMode: get().cameraMode === 'fps' ? 'tps' : 'fps' })
   },
 
   tryFire: (now) => {
@@ -158,9 +166,6 @@ export const useGameStore = create<GameStore>((set, get) => ({
     }
 
     const def = getWeapon(current.id)
-    const interval = 1000 / def.fireRate
-    if (now - current.lastShotAt < interval) return null
-
     const ammoInMag = current.ammoInMag - 1
     set({
       loadout: patchSlot(loadout, currentSlot, {
@@ -195,7 +200,6 @@ export const useGameStore = create<GameStore>((set, get) => ({
         isReloading: true,
         reloadEndsAt: now + def.reloadTime * 1000,
       }),
-      isAiming: false,
     })
     return true
   },
@@ -282,6 +286,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       loadout: null,
       isPointerLocked: false,
       isAiming: false,
+      cameraMode: 'fps',
       weaponReadyAt: 0,
       kills: 0,
       leaks: 0,

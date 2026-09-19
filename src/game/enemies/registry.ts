@@ -1,7 +1,11 @@
+import type { HitPopup } from '../../data/elements.ts'
+import type { ElementId } from '../../types/game.ts'
+
 type EnemyHandle = {
   id: number
   getPosition: () => { x: number; y: number; z: number }
-  takeDamage: (amount: number) => void
+  hitRadius: number
+  takeDamage: (amount: number, element: ElementId) => HitPopup | null
 }
 
 const handles = new Map<number, EnemyHandle>()
@@ -17,15 +21,19 @@ export function damageEnemiesAt(
   point: { x: number; y: number; z: number },
   radius: number,
   damage: number,
+  element: ElementId,
 ) {
-  const range = radius * radius
+  const popups: HitPopup[] = []
   for (const handle of handles.values()) {
     const pos = handle.getPosition()
     const dx = pos.x - point.x
     const dy = pos.y - point.y
     const dz = pos.z - point.z
-    if (dx * dx + dy * dy + dz * dz <= range) {
-      handle.takeDamage(damage)
+    const reach = Math.max(radius, handle.hitRadius)
+    if (dx * dx + dy * dy + dz * dz <= reach * reach) {
+      const popup = handle.takeDamage(damage, element)
+      if (popup) popups.push(popup)
     }
   }
+  return popups
 }

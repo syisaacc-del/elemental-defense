@@ -5,11 +5,20 @@ import type { RapierRigidBody } from '@react-three/rapier'
 import { useEffect, useRef, useState } from 'react'
 import type { RefObject } from 'react'
 import { PerspectiveCamera, Vector3 } from 'three'
+import { ELEMENT_COLORS } from '../data/elements.ts'
 import { getWeapon } from '../data/weapons.ts'
 import { useGameStore } from '../store/gameStore.ts'
 import type { FireResult } from '../types/game.ts'
 import { damageEnemiesAt } from './enemies/registry.ts'
-import { DEFAULT_FOV, ENEMY_HIT_RADIUS, GRENADE_SPEED, SHOT_RANGE, SNIPER_ADS_FOV } from './constants.ts'
+import {
+  DEFAULT_FOV,
+  ENEMY_HIT_RADIUS,
+  GRENADE_SPEED,
+  HIP_ADS_FOV,
+  PLAYER_EYE_OFFSET,
+  SHOT_RANGE,
+  SNIPER_ADS_FOV,
+} from './constants.ts'
 
 type Tracer = {
   id: number
@@ -25,6 +34,7 @@ type Grenade = {
   color: string
   damage: number
   radius: number
+  element: FireResult['element']
 }
 
 type Burst = {
@@ -87,6 +97,7 @@ export function CombatSystem({ playerBody }: { playerBody: RefObject<RapierRigid
   const { camera } = useThree()
   const { rapier, world } = useRapier()
   const firing = useRef(false)
+  const fireAcc = useRef(99)
   const origin = useRef(new Vector3())
   const direction = useRef(new Vector3())
   const [tracers, setTracers] = useState<Tracer[]>([])
@@ -100,10 +111,17 @@ export function CombatSystem({ playerBody }: { playerBody: RefObject<RapierRigid
   const weapon = current ? getWeapon(current.id) : null
 
   useEffect(() => {
+    fireAcc.current = 99
+  }, [current?.id])
+
+  useEffect(() => {
     const onDown = (event: MouseEvent) => {
       const store = useGameStore.getState()
       if (store.phase !== 'playing' || !store.isPointerLocked) return
-      if (event.button === 0) firing.current = true
+      if (event.button === 0) {
+        firing.current = true
+        fireAcc.current = 99
+      }
       if (event.button === 2) store.setAiming(true)
     }
 
@@ -129,6 +147,7 @@ export function CombatSystem({ playerBody }: { playerBody: RefObject<RapierRigid
   useEffect(() => {
     if (isPointerLocked) return
     firing.current = false
+    fireAcc.current = 99
     useGameStore.getState().setAiming(false)
   }, [isPointerLocked])
 
@@ -142,7 +161,14 @@ export function CombatSystem({ playerBody }: { playerBody: RefObject<RapierRigid
 
   const spawnShot = (shot: FireResult) => {
     camera.getWorldDirection(direction.current)
-    origin.current.copy(camera.position).addScaledVector(direction.current, 0.7)
+    const store = useGameStore.getState()
+    if (store.cameraMode === 'tps' && playerBody.current) {
+      const pos = playerBody.current.translation()
+      origin.current.set(pos.x, pos.y + PLAYER_EYE_OFFSET, pos.z)
+      origin.current.addScaledVector(direction.current, 0.7)
+    } else {
+      origin.current.copy(camera.position).addScaledVector(direction.current, 0.7)
+    }
 
     if (shot.kind === 'launcher') {
       setGrenades((list) => [
@@ -155,9 +181,10 @@ export function CombatSystem({ playerBody }: { playerBody: RefObject<RapierRigid
             direction.current.y * GRENADE_SPEED,
             direction.current.z * GRENADE_SPEED,
           ],
-          color: shot.accent,
+          color: ELEMENT_COLORS[shot.element],
           damage: shot.damage,
           radius: shot.aoeRadius,
+          element: shot.element,
         },
       ])
       return
@@ -183,11 +210,11 @@ export function CombatSystem({ playerBody }: { playerBody: RefObject<RapierRigid
         id,
         start: [origin.current.x, origin.current.y, origin.current.z],
         end: [end.x, end.y, end.z],
-        color: shot.accent,
+        color: ELEMENT_COLORS[shot.element],
       },
     ])
-    addBurst([end.x, end.y, end.z], shot.accent, shot.kind === 'sniper' ? 0.28 : 0.14, 90)
-    damageEnemiesAt(end, ENEMY_HIT_RADIUS, shot.damage)
+    addBurst([end.x, end.y, end.z], ELEMENT_COLORS[shot.element], shot.kind === 'sniper' ? 0.28 : 0.14, 90)
+    damageEnemiesAt(end, ENEMY_HIT_RADIUS, shot.damage, shot.element)
     window.setTimeout(() => {
       setTracers((list) => list.filter((item) => item.id !== id))
     }, 70)
@@ -198,13 +225,25 @@ export function CombatSystem({ playerBody }: { playerBody: RefObject<RapierRigid
     const store = useGameStore.getState()
     store.completeReloadIfDue(now)
 
-    const ads = store.isAiming && weapon?.kind === 'sniper'
-    const targetFov = ads ? SNIPER_ADS_FOV : DEFAULT_FOV
+    const ads = store.isAiming
+    const targetFov = ads
+      ? weapon?.kind === 'sniper'
+        ? SNIPER_ADS_FOV
+        : HIP_ADS_FOV
+      : DEFAULT_FOV
     const view = camera as PerspectiveCamera
     view.fov += (targetFov - view.fov) * Math.min(1, delta * 9)
     view.updateProjectionMatrix()
 
-    if (!firing.current) return
+    if (!firing.current || !weapon) {
+      if (!firing.current) fireAcc.current = 99
+      return
+    }
+
+    fireAcc.current += delta
+    const interval = 1 / weapon.fireRate
+    if (fireAcc.current < interval) return
+    fireAcc.current = 0
     const shot = store.tryFire(now)
     if (shot) spawnShot(shot)
   })
@@ -226,6 +265,7 @@ export function CombatSystem({ playerBody }: { playerBody: RefObject<RapierRigid
               { x: point[0], y: point[1], z: point[2] },
               grenade.radius,
               grenade.damage,
+              grenade.element,
             )
           }}
         />
@@ -237,6 +277,7 @@ export function CombatSystem({ playerBody }: { playerBody: RefObject<RapierRigid
           <meshBasicMaterial color={burst.color} transparent opacity={0.55} />
         </mesh>
       ))}
+
     </>
   )
 }
