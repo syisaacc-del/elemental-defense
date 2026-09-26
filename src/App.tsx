@@ -6,6 +6,7 @@ import { useWeaponHotkeys } from './game/useWeaponHotkeys.ts'
 import { GameOver } from './ui/GameOver.tsx'
 import { Hud } from './ui/Hud.tsx'
 import { Lobby } from './ui/Lobby.tsx'
+import { MobileControls } from './ui/MobileControls.tsx'
 
 const keyMap = [
   { name: 'forward', keys: ['KeyW', 'ArrowUp'] },
@@ -26,6 +27,7 @@ export default function App() {
         <GameCanvas />
         <Lobby />
         <Hud />
+        <MobileControls />
         <GameOver />
       </div>
     </KeyboardControls>

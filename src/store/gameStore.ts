@@ -47,7 +47,6 @@ function createLoadoutWeapon(id: WeaponId): LoadoutWeapon {
   return {
     id,
     ammoInMag: def.magazineSize,
-    reserveAmmo: def.magazineSize * 4,
     isReloading: false,
     lastShotAt: 0,
     reloadEndsAt: 0,
@@ -191,7 +190,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
     const current = loadout[currentSlot]
     const def = getWeapon(current.id)
-    if (current.isReloading || current.reserveAmmo <= 0 || current.ammoInMag >= def.magazineSize) {
+    if (current.isReloading || current.ammoInMag >= def.magazineSize) {
       return false
     }
 
@@ -214,11 +213,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
       const item = next[slot]
       if (!item.isReloading || now < item.reloadEndsAt) continue
       const def = getWeapon(item.id)
-      const taken = Math.min(def.magazineSize - item.ammoInMag, item.reserveAmmo)
       next[slot] = {
         ...item,
-        ammoInMag: item.ammoInMag + taken,
-        reserveAmmo: item.reserveAmmo - taken,
+        ammoInMag: def.magazineSize,
         isReloading: false,
         reloadEndsAt: 0,
       }

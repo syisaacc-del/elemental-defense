@@ -7,6 +7,7 @@ import type { RefObject } from 'react'
 import { Group, Vector3 } from 'three'
 import { useGameStore } from '../store/gameStore.ts'
 import { CombatSystem } from './CombatSystem.tsx'
+import { consumeLook, detectTouch, touchInput } from './touchInput.ts'
 import {
   PLAYER_EYE_OFFSET,
   PLAYER_JUMP,
@@ -62,6 +63,9 @@ export function Player() {
   const [, getKeys] = useKeyboardControls()
   const setPointerLocked = useGameStore((state) => state.setPointerLocked)
   const cameraMode = useGameStore((state) => state.cameraMode)
+  const isTouch = detectTouch()
+  const yaw = useRef(0)
+  const pitch = useRef(0)
 
   const worldForward = useMemo(() => new Vector3(), [])
   const worldRight = useMemo(() => new Vector3(), [])
@@ -71,6 +75,16 @@ export function Player() {
 
   useFrame((_, delta) => {
     if (!body.current) return
+
+    if (isTouch) {
+      const look = consumeLook()
+      yaw.current -= look.x * 0.0038
+      pitch.current -= look.y * 0.0032
+      pitch.current = Math.max(-1.15, Math.min(1.15, pitch.current))
+      camera.rotation.order = 'YXZ'
+      camera.rotation.y = yaw.current
+      camera.rotation.x = pitch.current
+    }
 
     const { forward, backward, left, right, jump } = getKeys()
     const velocity = body.current.linvel()
@@ -90,6 +104,11 @@ export function Player() {
     if (backward) wish.sub(worldForward)
     if (right) wish.add(worldRight)
     if (left) wish.sub(worldRight)
+    const stick = Math.hypot(touchInput.moveX, touchInput.moveY)
+    if (stick > 0.18) {
+      wish.addScaledVector(worldForward, touchInput.moveY)
+      wish.addScaledVector(worldRight, touchInput.moveX)
+    }
     if (wish.lengthSq() > 0) {
       wish.normalize().multiplyScalar(PLAYER_SPEED)
     }
@@ -101,10 +120,11 @@ export function Player() {
     const hit = world.castRay(ray, 1.15, false, undefined, undefined, undefined, body.current)
     const grounded = hit !== null && hit.timeOfImpact < 1.05
 
-    if (jump && grounded && !jumpHeld.current) {
+    const jumping = jump || touchInput.jump
+    if (jumping && grounded && !jumpHeld.current) {
       body.current.setLinvel({ x: wish.x, y: PLAYER_JUMP, z: wish.z }, true)
     }
-    jumpHeld.current = jump
+    jumpHeld.current = jumping
 
     if (cameraMode === 'fps') {
       camera.position.set(position.x, position.y + PLAYER_EYE_OFFSET, position.z)
@@ -133,10 +153,12 @@ export function Player() {
         <CapsuleCollider args={[0.5, 0.35]} />
       </RigidBody>
       <PlayerAvatar body={body} visible={cameraMode === 'tps'} />
-      <PointerLockControls
-        onLock={() => setPointerLocked(true)}
-        onUnlock={() => setPointerLocked(false)}
-      />
+      {!isTouch && (
+        <PointerLockControls
+          onLock={() => setPointerLocked(true)}
+          onUnlock={() => setPointerLocked(false)}
+        />
+      )}
       {cameraMode === 'fps' && <ViewWeapon />}
       <CombatSystem playerBody={body} />
     </>

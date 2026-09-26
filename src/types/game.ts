@@ -33,7 +33,6 @@ export type WeaponDef = {
 export type LoadoutWeapon = {
   id: WeaponId
   ammoInMag: number
-  reserveAmmo: number
   isReloading: boolean
   lastShotAt: number
   reloadEndsAt: number

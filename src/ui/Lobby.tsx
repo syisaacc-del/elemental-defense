@@ -1,6 +1,7 @@
 import { MATCH_SECONDS, WEAPON_LIST, getWeapon } from '../data/weapons.ts'
 import { playTheme } from '../game/themeMusic.ts'
 import { formatTime } from '../game/formatTime.ts'
+import { useIsTouch } from '../game/useIsTouch.ts'
 import { useGameStore } from '../store/gameStore.ts'
 import type { WeaponDef } from '../types/game.ts'
 
@@ -12,7 +13,7 @@ function WeaponCard({ weapon, selected, locked }: { weapon: WeaponDef; selected:
       type="button"
       onClick={() => toggleWeapon(weapon.id)}
       disabled={locked && !selected}
-      className={`rounded-2xl border p-4 text-left transition ${
+      className={`rounded-2xl border p-3 text-left transition md:p-4 ${
         selected
           ? 'border-cyan-300 bg-cyan-400/15 shadow-[0_0_24px_rgba(94,234,255,0.18)]'
           : locked
@@ -29,8 +30,8 @@ function WeaponCard({ weapon, selected, locked }: { weapon: WeaponDef; selected:
         </span>
         <span className="text-xs text-white/60">{weapon.kindLabel}</span>
       </div>
-      <h3 className="mb-1 text-lg font-bold text-white">{weapon.name}</h3>
-      <p className="mb-4 text-sm text-white/65">{weapon.description}</p>
+      <h3 className="mb-1 text-base font-bold text-white md:text-lg">{weapon.name}</h3>
+      <p className="mb-3 text-sm text-white/65 md:mb-4">{weapon.description}</p>
       <div className="grid grid-cols-3 gap-2 text-center text-xs text-white/75">
         <div className="rounded-lg bg-black/30 px-2 py-2">
           <div className="text-white/45">弹匣</div>
@@ -54,6 +55,8 @@ export function Lobby() {
   const score = useGameStore((state) => state.score)
   const selectedWeaponIds = useGameStore((state) => state.selectedWeaponIds)
   const startGame = useGameStore((state) => state.startGame)
+  const setPointerLocked = useGameStore((state) => state.setPointerLocked)
+  const isTouch = useIsTouch()
 
   if (phase !== 'lobby') return null
 
@@ -61,11 +64,11 @@ export function Lobby() {
   const canStart = selectedWeaponIds.length === 2
 
   return (
-    <div className="absolute inset-0 z-20 overflow-y-auto bg-slate-950/72 px-4 py-6 backdrop-blur-sm">
+    <div className="absolute inset-0 z-20 overflow-y-auto overscroll-contain bg-slate-950/72 px-4 py-6 backdrop-blur-sm [touch-action:pan-y]">
       <div className="mx-auto flex min-h-full max-w-6xl flex-col justify-center">
         <div className="mb-6 text-center">
           <p className="mb-2 text-sm tracking-[0.4em] text-cyan-200/80">ELEMENTAL DEFENSE</p>
-          <h1 className="text-5xl font-black text-white">元素防线</h1>
+          <h1 className="text-4xl font-black text-white md:text-5xl">元素防线</h1>
           <p className="mt-3 text-white/70">选出 2 把武器，守住 T 形地图底部的大塔。击杀 +10 分，漏进大塔 -10 分。</p>
         </div>
 
@@ -96,6 +99,10 @@ export function Lobby() {
             onClick={() => {
               if (!startGame()) return
               playTheme()
+              if (isTouch) {
+                setPointerLocked(true)
+                return
+              }
               document.querySelector('canvas')?.requestPointerLock()
             }}
             disabled={!canStart}
@@ -109,7 +116,9 @@ export function Lobby() {
           </button>
           <p className="text-sm text-white/55">
             {canStart
-              ? '点击后进入战场。按住左键开枪，换两把枪轮流打可触发元素反应。右键瞄准，P 切换人称。'
+              ? isTouch
+                ? '点开始后，左边摇杆走路，右边滑动转头，按住开枪。'
+                : '点击后进入战场。按住左键开枪，换两把枪轮流打可触发元素反应。右键瞄准，P 切换人称。'
               : '请先点选 2 张不同的武器卡片。'}
           </p>
         </div>

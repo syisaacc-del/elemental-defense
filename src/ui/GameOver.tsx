@@ -18,7 +18,7 @@ export function GameOver() {
     <div className="absolute inset-0 z-30 flex items-center justify-center bg-slate-950/80 px-4">
       <div className="w-full max-w-md rounded-3xl border border-white/15 bg-black/70 p-8 text-center">
         <p className="text-sm tracking-[0.3em] text-cyan-200/80">ELEMENTAL DEFENSE</p>
-        <h2 className="mt-2 text-4xl font-black text-white">{title}</h2>
+        <h2 className="mt-2 text-3xl font-black text-white md:text-4xl">{title}</h2>
         <p className="mt-3 text-white/65">{summary}</p>
 
         <div className="mt-6 grid grid-cols-3 gap-3">

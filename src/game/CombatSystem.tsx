@@ -10,6 +10,7 @@ import { getWeapon } from '../data/weapons.ts'
 import { useGameStore } from '../store/gameStore.ts'
 import type { FireResult } from '../types/game.ts'
 import { damageEnemiesAt } from './enemies/registry.ts'
+import { detectTouch, touchInput } from './touchInput.ts'
 import {
   DEFAULT_FOV,
   ENEMY_HIT_RADIUS,
@@ -116,6 +117,7 @@ export function CombatSystem({ playerBody }: { playerBody: RefObject<RapierRigid
 
   useEffect(() => {
     const onDown = (event: MouseEvent) => {
+      if (detectTouch()) return
       const store = useGameStore.getState()
       if (store.phase !== 'playing' || !store.isPointerLocked) return
       if (event.button === 0) {
@@ -126,6 +128,7 @@ export function CombatSystem({ playerBody }: { playerBody: RefObject<RapierRigid
     }
 
     const onUp = (event: MouseEvent) => {
+      if (detectTouch()) return
       if (event.button === 0) firing.current = false
       if (event.button === 2) useGameStore.getState().setAiming(false)
     }
@@ -235,8 +238,9 @@ export function CombatSystem({ playerBody }: { playerBody: RefObject<RapierRigid
     view.fov += (targetFov - view.fov) * Math.min(1, delta * 9)
     view.updateProjectionMatrix()
 
-    if (!firing.current || !weapon) {
-      if (!firing.current) fireAcc.current = 99
+    const holding = firing.current || touchInput.firing
+    if (!holding || !weapon) {
+      if (!holding) fireAcc.current = 99
       return
     }
 
