@@ -1,69 +1,160 @@
+import { useGLTF } from '@react-three/drei'
 import { useFrame, useThree } from '@react-three/fiber'
-import { useEffect, useRef } from 'react'
-import { Group } from 'three'
+import { useEffect, useMemo, useRef } from 'react'
+import { Box3, Group, Mesh, MeshStandardMaterial, Vector3, type Object3D } from 'three'
 import { getWeapon } from '../data/weapons.ts'
 import { useGameStore } from '../store/gameStore.ts'
-import type { WeaponKind } from '../types/game.ts'
+import type { WeaponId } from '../types/game.ts'
 
-function WeaponMesh({ kind, accent }: { kind: WeaponKind; accent: string }) {
-  if (kind === 'sniper') {
-    return (
-      <group>
-        <mesh position={[0, 0.02, 0.02]}>
-          <boxGeometry args={[0.07, 0.09, 0.62]} />
-          <meshStandardMaterial color="#161b24" metalness={0.45} roughness={0.35} />
-        </mesh>
-        <mesh position={[0, 0.03, -0.48]}>
-          <boxGeometry args={[0.035, 0.035, 0.55]} />
-          <meshStandardMaterial color={accent} emissive={accent} emissiveIntensity={0.7} />
-        </mesh>
-        <mesh position={[0, 0.11, -0.08]}>
-          <cylinderGeometry args={[0.035, 0.035, 0.16, 12]} />
-          <meshStandardMaterial color="#0f141c" metalness={0.6} roughness={0.25} />
-        </mesh>
-        <mesh position={[0.015, -0.12, 0.16]}>
-          <boxGeometry args={[0.06, 0.18, 0.14]} />
-          <meshStandardMaterial color="#11141b" />
-        </mesh>
-      </group>
-    )
+const GUN_FILE: Record<WeaponId, string> = {
+  'water-rifle': 'watergun.glb',
+  'thunder-rifle': 'thundergun.glb',
+  'ice-sniper': 'icegun.glb',
+  'wind-sniper': 'windgun.glb',
+  'fire-launcher': 'fire gun.glb',
+  'grass-launcher': 'glassgun.glb',
+}
+
+const AXIS_X = new Vector3(1, 0, 0)
+const AXIS_Y = new Vector3(0, 1, 0)
+const AXIS_Z = new Vector3(0, 0, 1)
+
+function gunUrl(id: WeaponId) {
+  return `${import.meta.env.BASE_URL}models/weapons/${encodeURIComponent(GUN_FILE[id])}`
+}
+
+for (const id of Object.keys(GUN_FILE) as WeaponId[]) {
+  useGLTF.preload(gunUrl(id))
+}
+
+function isMesh(obj: Object3D): obj is Mesh {
+  return (obj as Mesh).isMesh
+}
+
+function collectPoints(root: Object3D) {
+  const pts: Vector3[] = []
+  root.updateMatrixWorld(true)
+  root.traverse((obj) => {
+    if (!isMesh(obj) || !obj.geometry.attributes.position) return
+    const pos = obj.geometry.attributes.position
+    const step = Math.max(1, Math.floor(pos.count / 2500))
+    const point = new Vector3()
+    for (let i = 0; i < pos.count; i += step) {
+      point.fromBufferAttribute(pos, i)
+      obj.localToWorld(point)
+      pts.push(point.clone())
+    }
+  })
+  return pts
+}
+
+function crossSection(points: Vector3[]) {
+  if (points.length < 5) return 0
+  let minY = Infinity
+  let maxY = -Infinity
+  let minX = Infinity
+  let maxX = -Infinity
+  for (const point of points) {
+    minY = Math.min(minY, point.y)
+    maxY = Math.max(maxY, point.y)
+    minX = Math.min(minX, point.x)
+    maxX = Math.max(maxX, point.x)
+  }
+  return maxY - minY + (maxX - minX)
+}
+
+function fitViewmodel(source: Object3D, weaponId: WeaponId) {
+  const model = source.clone(true)
+  const helpers: Object3D[] = []
+  model.traverse((obj) => {
+    if (!isMesh(obj)) return
+    if (/plane|area/i.test(obj.name)) helpers.push(obj)
+    obj.frustumCulled = false
+    const materials = Array.isArray(obj.material) ? obj.material : [obj.material]
+    for (const material of materials) {
+      if (!(material instanceof MeshStandardMaterial)) continue
+      material.metalness = Math.min(material.metalness, 0.2)
+      if (material.roughness > 0.92) material.roughness = 0.62
+    }
+  })
+  for (const helper of helpers) helper.removeFromParent()
+
+  model.updateMatrixWorld(true)
+  const center = new Box3().setFromObject(model).getCenter(new Vector3())
+  model.position.sub(center)
+  model.updateMatrixWorld(true)
+
+  const size = new Box3().setFromObject(model).getSize(new Vector3())
+  const longAxis = (['x', 'y', 'z'] as const).reduce((best, axis) => (size[axis] > size[best] ? axis : best))
+
+  const wrapper = new Group()
+  wrapper.add(model)
+  if (longAxis === 'x') wrapper.rotateOnWorldAxis(AXIS_Y, -Math.PI / 2)
+  else if (longAxis === 'y') wrapper.rotateOnWorldAxis(AXIS_X, Math.PI / 2)
+  wrapper.updateMatrixWorld(true)
+
+  const endThickness = (pts: Vector3[]) => {
+    let minZ = Infinity
+    let maxZ = -Infinity
+    for (const point of pts) {
+      minZ = Math.min(minZ, point.z)
+      maxZ = Math.max(maxZ, point.z)
+    }
+    const mid = (minZ + maxZ) / 2
+    const span = maxZ - minZ || 1
+    return {
+      front: crossSection(pts.filter((point) => point.z < mid - span * 0.18)),
+      back: crossSection(pts.filter((point) => point.z > mid + span * 0.18)),
+    }
   }
 
-  if (kind === 'launcher') {
-    return (
-      <group>
-        <mesh position={[0, 0.04, -0.08]} rotation={[Math.PI / 2, 0, 0]}>
-          <cylinderGeometry args={[0.1, 0.11, 0.62, 16]} />
-          <meshStandardMaterial color="#1a1f28" metalness={0.35} roughness={0.45} />
-        </mesh>
-        <mesh position={[0, 0.04, -0.42]} rotation={[Math.PI / 2, 0, 0]}>
-          <cylinderGeometry args={[0.08, 0.08, 0.12, 16]} />
-          <meshStandardMaterial color={accent} emissive={accent} emissiveIntensity={0.85} />
-        </mesh>
-        <mesh position={[0.02, -0.12, 0.12]}>
-          <boxGeometry args={[0.08, 0.2, 0.16]} />
-          <meshStandardMaterial color="#11141b" />
-        </mesh>
-      </group>
-    )
+  let pts = collectPoints(wrapper)
+  const ends = endThickness(pts)
+  if (ends.front > ends.back * 1.15) {
+    wrapper.rotateOnWorldAxis(AXIS_Y, Math.PI)
+    wrapper.updateMatrixWorld(true)
+    pts = collectPoints(wrapper)
   }
 
-  return (
-    <group>
-      <mesh>
-        <boxGeometry args={[0.09, 0.13, 0.58]} />
-        <meshStandardMaterial color="#1f2430" metalness={0.4} roughness={0.4} />
-      </mesh>
-      <mesh position={[0, 0.02, -0.42]}>
-        <boxGeometry args={[0.05, 0.05, 0.36]} />
-        <meshStandardMaterial color={accent} emissive={accent} emissiveIntensity={0.8} />
-      </mesh>
-      <mesh position={[0.02, -0.14, 0.08]}>
-        <boxGeometry args={[0.07, 0.2, 0.14]} />
-        <meshStandardMaterial color="#11141b" />
-      </mesh>
-    </group>
-  )
+  let bestRoll = 0
+  let bestScore = -Infinity
+  for (const deg of [0, 90, 180, 270]) {
+    const rad = (deg * Math.PI) / 180
+    const c = Math.cos(rad)
+    const s = Math.sin(rad)
+    const rolled = pts.map((point) => new Vector3(point.x * c - point.y * s, point.x * s + point.y * c, point.z))
+    const ys = rolled.map((point) => point.y).sort((a, b) => a - b)
+    const cut = ys[Math.max(1, Math.floor(ys.length * 0.12))]
+    const low = rolled.filter((point) => point.y <= cut)
+    const avgY = low.reduce((sum, point) => sum + point.y, 0) / low.length
+    const avgZ = low.reduce((sum, point) => sum + point.z, 0) / low.length
+    const score = -avgY + avgZ * 0.45
+    if (score > bestScore) {
+      bestScore = score
+      bestRoll = deg
+    }
+  }
+  if (bestRoll) wrapper.rotateOnWorldAxis(AXIS_Z, (bestRoll * Math.PI) / 180)
+  if (weaponId === 'thunder-rifle' || weaponId === 'ice-sniper') {
+    wrapper.rotateOnWorldAxis(AXIS_Y, Math.PI)
+    wrapper.rotateOnWorldAxis(AXIS_Z, Math.PI)
+  }
+  if (weaponId === 'wind-sniper') {
+    wrapper.rotateOnWorldAxis(AXIS_Z, Math.PI)
+  }
+  wrapper.updateMatrixWorld(true)
+
+  const fitted = new Box3().setFromObject(wrapper).getSize(new Vector3())
+  let scale = 0.5 / fitted.z
+  if (fitted.y * scale > 0.28) scale = 0.28 / fitted.y
+  wrapper.scale.setScalar(scale)
+  return wrapper
+}
+
+function GunModel({ weaponId }: { weaponId: WeaponId }) {
+  const { scene } = useGLTF(gunUrl(weaponId))
+  const model = useMemo(() => fitViewmodel(scene, weaponId), [scene, weaponId])
+  return <primitive object={model} />
 }
 
 export function ViewWeapon() {
@@ -123,7 +214,7 @@ export function ViewWeapon() {
   return (
     <group ref={root}>
       <group ref={local} position={[0.28, -0.24, -0.58]}>
-        <WeaponMesh kind={weapon.kind} accent={weapon.accent} />
+        <GunModel key={weapon.id} weaponId={weapon.id} />
       </group>
     </group>
   )
