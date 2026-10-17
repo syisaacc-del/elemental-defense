@@ -5,4 +5,9 @@ import { defineConfig } from 'vite'
 export default defineConfig({
   base: process.env.NODE_ENV === 'production' ? '/elemental-defense/' : '/',
   plugins: [react(), tailwindcss()],
+  server: {
+    watch: {
+      ignored: ['**/public/models/**'],
+    },
+  },
 })

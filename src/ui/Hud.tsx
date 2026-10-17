@@ -3,6 +3,7 @@ import { RELOAD_SECONDS, getWeapon } from '../data/weapons.ts'
 import { SNIPER_ZOOM } from '../game/constants.ts'
 import { formatTime } from '../game/formatTime.ts'
 import { useIsTouch } from '../game/useIsTouch.ts'
+import { formatKey, useSettingsStore } from '../store/settingsStore.ts'
 import { useGameStore } from '../store/gameStore.ts'
 
 export function Hud() {
@@ -19,6 +20,7 @@ export function Hud() {
   const kills = useGameStore((state) => state.kills)
   const leaks = useGameStore((state) => state.leaks)
   const isTouch = useIsTouch()
+  const keys = useSettingsStore((state) => state.keys)
 
   if (phase !== 'playing' || !loadout) return null
 
@@ -33,7 +35,8 @@ export function Hud() {
           <div className="rounded-2xl border border-white/15 bg-black/60 px-8 py-5 text-center">
             <p className="text-xl font-bold text-white">点击画面开始操控</p>
             <p className="mt-2 text-sm text-white/65">
-              按住左键开枪 · 换枪打出反应 · 右键瞄准 · P 切换人称 · R 换弹
+              按住左键开枪 · 右键瞄准 · {formatKey(keys.walk)} 慢走 · {formatKey(keys.camera)}{' '}
+              切换人称 · {formatKey(keys.reload)} 换弹 · {formatKey(keys.menu)} 设定
             </p>
           </div>
         </div>
@@ -66,7 +69,7 @@ export function Hud() {
               }`}
             >
               <div className="flex items-center justify-between text-xs text-white/55">
-                <span>按键 {index + 1}</span>
+                <span>按键 {formatKey(index === 0 ? keys.weapon1 : keys.weapon2)}</span>
                 <span>{itemWeapon.elementLabel}元素</span>
               </div>
               <div className="mt-1 text-sm font-bold text-white md:text-base">{itemWeapon.name}</div>

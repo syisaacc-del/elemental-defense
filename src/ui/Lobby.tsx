@@ -2,6 +2,7 @@ import { MATCH_SECONDS, WEAPON_LIST, getWeapon } from '../data/weapons.ts'
 import { playTheme } from '../game/themeMusic.ts'
 import { formatTime } from '../game/formatTime.ts'
 import { useIsTouch } from '../game/useIsTouch.ts'
+import { formatKey, useSettingsStore } from '../store/settingsStore.ts'
 import { useGameStore } from '../store/gameStore.ts'
 import type { WeaponDef } from '../types/game.ts'
 
@@ -57,6 +58,7 @@ export function Lobby() {
   const startGame = useGameStore((state) => state.startGame)
   const setPointerLocked = useGameStore((state) => state.setPointerLocked)
   const isTouch = useIsTouch()
+  const keys = useSettingsStore((state) => state.keys)
 
   if (phase !== 'lobby') return null
 
@@ -118,7 +120,7 @@ export function Lobby() {
             {canStart
               ? isTouch
                 ? '点开始后，左边摇杆走路，右边滑动转头，按住开枪。'
-                : '点击后进入战场。按住左键开枪，换两把枪轮流打可触发元素反应。右键瞄准，P 切换人称。'
+                : `点击后进入战场。按住左键开枪，换两把枪轮流打可触发元素反应。右键瞄准，${formatKey(keys.walk)} 慢走，${formatKey(keys.camera)} 切换人称，${formatKey(keys.menu)} 打开设定。`
               : '请先点选 2 张不同的武器卡片。'}
           </p>
         </div>

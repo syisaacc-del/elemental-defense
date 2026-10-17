@@ -3,57 +3,23 @@ import { useFrame, useThree } from '@react-three/fiber'
 import { CapsuleCollider, RigidBody, useRapier } from '@react-three/rapier'
 import type { RapierRigidBody } from '@react-three/rapier'
 import { useMemo, useRef } from 'react'
-import type { RefObject } from 'react'
-import { Group, Vector3 } from 'three'
+import { Vector3 } from 'three'
 import { useGameStore } from '../store/gameStore.ts'
+import { useSettingsStore } from '../store/settingsStore.ts'
 import { CombatSystem } from './CombatSystem.tsx'
 import { consumeLook, detectTouch, touchInput } from './touchInput.ts'
 import {
   PLAYER_EYE_OFFSET,
   PLAYER_JUMP,
   PLAYER_SPEED,
+  PLAYER_WALK_SPEED,
   TPS_DISTANCE,
   TPS_HEIGHT,
 } from './constants.ts'
 import { PLAYER_START } from './map/layout.ts'
+import { PlayerAvatar } from './PlayerCharacter.tsx'
+import { playerMotion } from './playerMotion.ts'
 import { ViewWeapon } from './ViewWeapon.tsx'
-
-function PlayerAvatar({
-  body,
-  visible,
-}: {
-  body: RefObject<RapierRigidBody | null>
-  visible: boolean
-}) {
-  const group = useRef<Group>(null)
-  const look = useMemo(() => new Vector3(), [])
-  const { camera } = useThree()
-
-  useFrame(() => {
-    if (!group.current || !body.current) return
-    const pos = body.current.translation()
-    group.current.position.set(pos.x, pos.y - 0.85, pos.z)
-    camera.getWorldDirection(look)
-    look.y = 0
-    if (look.lengthSq() > 0.0001) {
-      look.normalize()
-      group.current.rotation.y = Math.atan2(look.x, look.z)
-    }
-  })
-
-  return (
-    <group ref={group} visible={visible}>
-      <mesh position={[0, 0.7, 0]} castShadow>
-        <capsuleGeometry args={[0.32, 0.7, 6, 12]} />
-        <meshStandardMaterial color="#2f4a6d" roughness={0.55} />
-      </mesh>
-      <mesh position={[0, 1.38, 0]} castShadow>
-        <sphereGeometry args={[0.24, 14, 14]} />
-        <meshStandardMaterial color="#d8b48a" />
-      </mesh>
-    </group>
-  )
-}
 
 export function Player() {
   const body = useRef<RapierRigidBody>(null)
@@ -63,6 +29,8 @@ export function Player() {
   const [, getKeys] = useKeyboardControls()
   const setPointerLocked = useGameStore((state) => state.setPointerLocked)
   const cameraMode = useGameStore((state) => state.cameraMode)
+  const settingsOpen = useSettingsStore((state) => state.settingsOpen)
+  const mouseSensitivity = useSettingsStore((state) => state.mouseSensitivity)
   const isTouch = detectTouch()
   const yaw = useRef(0)
   const pitch = useRef(0)
@@ -76,19 +44,20 @@ export function Player() {
   useFrame((_, delta) => {
     if (!body.current) return
 
-    if (isTouch) {
+    if (isTouch && !settingsOpen) {
       const look = consumeLook()
-      yaw.current -= look.x * 0.0038
-      pitch.current -= look.y * 0.0032
+      yaw.current -= look.x * 0.0038 * mouseSensitivity
+      pitch.current -= look.y * 0.0032 * mouseSensitivity
       pitch.current = Math.max(-1.15, Math.min(1.15, pitch.current))
       camera.rotation.order = 'YXZ'
       camera.rotation.y = yaw.current
       camera.rotation.x = pitch.current
     }
 
-    const { forward, backward, left, right, jump } = getKeys()
+    const { forward, backward, left, right, jump, walk } = getKeys()
     const velocity = body.current.linvel()
     const position = body.current.translation()
+    const paused = settingsOpen
 
     camera.getWorldDirection(worldForward)
     worldForward.y = 0
@@ -100,27 +69,34 @@ export function Player() {
     worldRight.crossVectors(worldForward, worldUp).normalize()
 
     wish.set(0, 0, 0)
-    if (forward) wish.add(worldForward)
-    if (backward) wish.sub(worldForward)
-    if (right) wish.add(worldRight)
-    if (left) wish.sub(worldRight)
     const stick = Math.hypot(touchInput.moveX, touchInput.moveY)
-    if (stick > 0.18) {
-      wish.addScaledVector(worldForward, touchInput.moveY)
-      wish.addScaledVector(worldRight, touchInput.moveX)
+    if (!paused) {
+      if (forward) wish.add(worldForward)
+      if (backward) wish.sub(worldForward)
+      if (right) wish.add(worldRight)
+      if (left) wish.sub(worldRight)
+      if (stick > 0.18) {
+        wish.addScaledVector(worldForward, touchInput.moveY)
+        wish.addScaledVector(worldRight, touchInput.moveX)
+      }
     }
+    const walking = Boolean(walk) || (stick > 0.18 && stick < 0.62)
     if (wish.lengthSq() > 0) {
-      wish.normalize().multiplyScalar(PLAYER_SPEED)
+      wish.normalize().multiplyScalar(walking ? PLAYER_WALK_SPEED : PLAYER_SPEED)
     }
 
-    body.current.setLinvel({ x: wish.x, y: velocity.y, z: wish.z }, true)
+    body.current.setLinvel({ x: wish.x, y: paused ? 0 : velocity.y, z: wish.z }, true)
 
     const origin = { x: position.x, y: position.y, z: position.z }
     const ray = new rapier.Ray(origin, { x: 0, y: -1, z: 0 })
     const hit = world.castRay(ray, 1.15, false, undefined, undefined, undefined, body.current)
     const grounded = hit !== null && hit.timeOfImpact < 1.05
+    playerMotion.moveSpeed = Math.hypot(wish.x, wish.z)
+    playerMotion.walking = walking && playerMotion.moveSpeed > 0.2
+    playerMotion.grounded = grounded
+    playerMotion.airborne = !grounded && !paused
 
-    const jumping = jump || touchInput.jump
+    const jumping = !paused && (jump || touchInput.jump)
     if (jumping && grounded && !jumpHeld.current) {
       body.current.setLinvel({ x: wish.x, y: PLAYER_JUMP, z: wish.z }, true)
     }
@@ -155,6 +131,7 @@ export function Player() {
       <PlayerAvatar body={body} visible={cameraMode === 'tps'} />
       {!isTouch && (
         <PointerLockControls
+          pointerSpeed={mouseSensitivity}
           onLock={() => setPointerLocked(true)}
           onUnlock={() => setPointerLocked(false)}
         />

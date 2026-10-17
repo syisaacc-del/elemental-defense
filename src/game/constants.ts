@@ -1,5 +1,6 @@
 export const MAP_SIZE = 140
 export const PLAYER_SPEED = 7
+export const PLAYER_WALK_SPEED = 3.1
 export const PLAYER_JUMP = 7.2
 export const PLAYER_EYE_OFFSET = 0.55
 

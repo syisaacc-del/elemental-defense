@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { MATCH_SECONDS } from '../../data/weapons.ts'
 import { useGameStore } from '../../store/gameStore.ts'
+import { useSettingsStore } from '../../store/settingsStore.ts'
 import { MAX_ENEMIES } from '../constants.ts'
 import { Enemy } from './Enemy.tsx'
 import { createEnemySpawn, spawnIntervalForTime } from './spawn.ts'
@@ -16,6 +17,7 @@ export function EnemySpawner() {
     if (phase !== 'playing') return
 
     const spawnOne = () => {
+      if (useSettingsStore.getState().settingsOpen) return
       const remaining = useGameStore.getState().timeLeft
       setEnemies((list) => {
         if (list.length >= MAX_ENEMIES) return list

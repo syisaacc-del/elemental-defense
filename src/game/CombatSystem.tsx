@@ -8,11 +8,12 @@ import { PerspectiveCamera, Vector3 } from 'three'
 import { ELEMENT_COLORS } from '../data/elements.ts'
 import { getWeapon } from '../data/weapons.ts'
 import { useGameStore } from '../store/gameStore.ts'
+import { useSettingsStore } from '../store/settingsStore.ts'
 import type { FireResult } from '../types/game.ts'
 import { damageEnemiesAt } from './enemies/registry.ts'
+import { playShotSound } from './combatAudio.ts'
 import { detectTouch, touchInput } from './touchInput.ts'
 import {
-  DEFAULT_FOV,
   ENEMY_HIT_RADIUS,
   GRENADE_SPEED,
   HIP_ADS_FOV,
@@ -119,7 +120,7 @@ export function CombatSystem({ playerBody }: { playerBody: RefObject<RapierRigid
     const onDown = (event: MouseEvent) => {
       if (detectTouch()) return
       const store = useGameStore.getState()
-      if (store.phase !== 'playing' || !store.isPointerLocked) return
+      if (store.phase !== 'playing' || !store.isPointerLocked || useSettingsStore.getState().settingsOpen) return
       if (event.button === 0) {
         firing.current = true
         fireAcc.current = 99
@@ -172,6 +173,8 @@ export function CombatSystem({ playerBody }: { playerBody: RefObject<RapierRigid
     } else {
       origin.current.copy(camera.position).addScaledVector(direction.current, 0.7)
     }
+
+    playShotSound(shot.kind)
 
     if (shot.kind === 'launcher') {
       setGrenades((list) => [
@@ -229,14 +232,17 @@ export function CombatSystem({ playerBody }: { playerBody: RefObject<RapierRigid
     store.completeReloadIfDue(now)
 
     const ads = store.isAiming
+    const hipFov = useSettingsStore.getState().fov
     const targetFov = ads
       ? weapon?.kind === 'sniper'
         ? SNIPER_ADS_FOV
-        : HIP_ADS_FOV
-      : DEFAULT_FOV
+        : Math.min(HIP_ADS_FOV, hipFov - 12)
+      : hipFov
     const view = camera as PerspectiveCamera
     view.fov += (targetFov - view.fov) * Math.min(1, delta * 9)
     view.updateProjectionMatrix()
+
+    if (useSettingsStore.getState().settingsOpen) return
 
     const holding = firing.current || touchInput.firing
     if (!holding || !weapon) {

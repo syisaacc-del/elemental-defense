@@ -7,6 +7,7 @@ import { Group } from 'three'
 import { AURA_MS, ELEMENT_COLORS, resolveReaction } from '../../data/elements.ts'
 import type { ElementId } from '../../types/game.ts'
 import { useGameStore } from '../../store/gameStore.ts'
+import { useSettingsStore } from '../../store/settingsStore.ts'
 import { BASE_TRIGGER_RADIUS } from '../constants.ts'
 import { BASE_POSITION, ELITE_SPEED, NORMAL_SPEED, WAYPOINT_REACH } from '../map/layout.ts'
 import { emitHitPopup } from '../combat/combatFx.ts'
@@ -116,6 +117,10 @@ export function Enemy({
   useFrame(() => {
     if (!body.current || settled.current) return
     if (useGameStore.getState().phase !== 'playing') return
+    if (useSettingsStore.getState().settingsOpen) {
+      body.current.setLinvel({ x: 0, y: 0, z: 0 }, true)
+      return
+    }
     if (auraRef.current && performance.now() > auraUntil.current) {
       auraRef.current = null
       setAura(null)
