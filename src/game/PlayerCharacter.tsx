@@ -34,6 +34,7 @@ for (const id of ['water-rifle', 'thunder-rifle', 'ice-sniper', 'wind-sniper', '
 const TMP_POS = new Vector3()
 const TMP_OFFSET = new Vector3()
 const TMP_QUAT = new Quaternion()
+const ROOT_QUAT = new Quaternion()
 const GUN_HOLD_POS = new Vector3(0.12, 0.035, 0.018)
 const GUN_HOLD_ROT = new Quaternion().setFromEuler(new Euler(Math.PI / 2, Math.PI, 0))
 
@@ -247,8 +248,12 @@ function FbxCharacter({
       hand.getWorldPosition(TMP_POS)
       hand.getWorldQuaternion(TMP_QUAT)
       TMP_OFFSET.copy(GUN_HOLD_POS).applyQuaternion(TMP_QUAT)
-      gunRoot.current.position.copy(TMP_POS).add(TMP_OFFSET)
-      gunRoot.current.quaternion.copy(TMP_QUAT).multiply(GUN_HOLD_ROT)
+      TMP_POS.add(TMP_OFFSET)
+      root.current.updateWorldMatrix(true, false)
+      root.current.worldToLocal(TMP_POS)
+      gunRoot.current.position.copy(TMP_POS)
+      root.current.getWorldQuaternion(ROOT_QUAT).invert()
+      gunRoot.current.quaternion.copy(ROOT_QUAT).multiply(TMP_QUAT).multiply(GUN_HOLD_ROT)
     }
   })
 
