@@ -10,6 +10,20 @@ export const VERSUS_HP = 400
 export const VERSUS_WINS_NEEDED = 2
 export const SPAWN_SHIELD_MS = 2000
 
+// STUN + TURN servers: without TURN, two players on "closed" networks
+// (e.g. phone on 4G, strict office wifi) can never reach each other.
+// OpenRelay is a free public TURN service that relays traffic as last resort.
+const PEER_OPTIONS = {
+  config: {
+    iceServers: [
+      { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] },
+      { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
+      { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
+      { urls: 'turn:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' },
+    ],
+  },
+}
+
 export type VersusPhase = 'off' | 'hosting' | 'joining' | 'playing' | 'ended'
 export type VersusResult = 'win' | 'lose' | 'left'
 
@@ -280,14 +294,9 @@ function cleanupPeer() {
   remoteRecoil.pulse = 0
 }
 
-export function hostVersus(rifle: WeaponId) {
-  cleanupPeer()
-  useVersusStore.getState().patch({ phase: 'hosting', code: '', error: '', myRifle: rifle, result: null })
-  const code = makeCode()
-  const p = new Peer(code)
-  peer = p
+function wireHostPeer(p: Peer) {
   p.on('open', () => {
-    useVersusStore.getState().patch({ code })
+    if (p.id) useVersusStore.getState().patch({ code: p.id })
   })
   p.on('connection', (c) => {
     if (conn && conn.open) {
@@ -296,33 +305,56 @@ export function hostVersus(rifle: WeaponId) {
     }
     wireConnection(c, 'host')
   })
-  p.on('error', (err) => {
-    const type = (err as { type?: string }).type ?? ''
-    if (type === 'unavailable-id' && hostRetries < 3) {
-      hostRetries += 1
-      try {
-        p.destroy()
-      } catch {
-        // ignore
-      }
-      peer = null
-      const retry = new Peer(makeCode())
-      peer = retry
-      retry.on('open', () => {
-        if (retry.id) useVersusStore.getState().patch({ code: retry.id })
-      })
-      retry.on('connection', (c) => {
-        if (conn && conn.open) {
-          c.on('open', () => c.close())
-          return
-        }
-        wireConnection(c, 'host')
-      })
-      retry.on('error', () => useVersusStore.getState().patch({ phase: 'off', error: '開房失敗，請再試一次' }))
-      return
+  p.on('disconnected', () => {
+    // Broker connection dropped (wifi hiccup, sleep mode...) — quietly
+    // reconnect so the room code keeps working instead of going stale.
+    if (peer !== p || started) return
+    try {
+      p.reconnect()
+    } catch {
+      // ignore
     }
-    useVersusStore.getState().patch({ phase: 'off', error: '連線伺服器出錯，請再試一次' })
   })
+  p.on('error', (err) => {
+    if (peer !== p) return
+    const v = useVersusStore.getState()
+    if (v.phase !== 'hosting' || started) return
+    const type = (err as { type?: string }).type ?? ''
+    // Stale/taken code or broker/network failure before anyone joined:
+    // re-register with a FRESH code instead of leaving a dead code on screen.
+    if (
+      type === 'unavailable-id' ||
+      type === 'network' ||
+      type === 'server-error' ||
+      type === 'socket-error' ||
+      type === 'socket-closed'
+    ) {
+      if (hostRetries < 4) {
+        hostRetries += 1
+        try {
+          p.destroy()
+        } catch {
+          // ignore
+        }
+        if (peer === p) peer = null
+        registerHost()
+        return
+      }
+    }
+    useVersusStore.getState().patch({ phase: 'off', error: '開房失敗，請再試一次' })
+  })
+}
+
+function registerHost() {
+  const p = new Peer(makeCode(), PEER_OPTIONS)
+  peer = p
+  wireHostPeer(p)
+}
+
+export function hostVersus(rifle: WeaponId) {
+  cleanupPeer()
+  useVersusStore.getState().patch({ phase: 'hosting', code: '', error: '', myRifle: rifle, result: null })
+  registerHost()
 }
 
 export function joinVersus(code: string, rifle: WeaponId) {
@@ -333,7 +365,7 @@ export function joinVersus(code: string, rifle: WeaponId) {
     return
   }
   useVersusStore.getState().patch({ phase: 'joining', code: clean, error: '', myRifle: rifle, result: null })
-  const p = new Peer()
+  const p = new Peer(PEER_OPTIONS)
   peer = p
   p.on('open', () => {
     const c = p.connect(clean, { reliable: true })
@@ -341,14 +373,29 @@ export function joinVersus(code: string, rifle: WeaponId) {
     joinTimer = setTimeout(() => {
       if (!started) {
         cleanupPeer()
-        useVersusStore.getState().patch({ phase: 'off', error: '連接超時，搵唔到呢個房' })
+        useVersusStore.getState().patch({
+          phase: 'off',
+          error: '連接超時：個房碼可能過咗期。叫房主撳「取消」再開一次房，用新碼再試',
+        })
       }
     }, 8000)
   })
+  p.on('disconnected', () => {
+    if (peer !== p || started) return
+    try {
+      p.reconnect()
+    } catch {
+      // ignore
+    }
+  })
   p.on('error', (err) => {
+    if (peer !== p || started) return
     const type = (err as { type?: string }).type ?? ''
     if (type === 'peer-unavailable') {
-      useVersusStore.getState().patch({ phase: 'off', error: '搵唔到呢個房，請檢查房碼' })
+      useVersusStore.getState().patch({
+        phase: 'off',
+        error: '搵唔到呢個房：檢查下房碼啱唔啱，或者叫房主開多次房攞個新碼',
+      })
     } else {
       useVersusStore.getState().patch({ phase: 'off', error: '連線伺服器出錯，請再試一次' })
     }
