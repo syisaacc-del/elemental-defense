@@ -69,6 +69,7 @@ type VersusStore = {
   phase: VersusPhase
   code: string
   error: string
+  step: string
   myRifle: WeaponId
   remoteRifle: WeaponId
   myHp: number
@@ -86,6 +87,7 @@ export const useVersusStore = create<VersusStore>((set) => ({
   phase: 'off',
   code: '',
   error: '',
+  step: '',
   myRifle: 'water-rifle',
   remoteRifle: 'water-rifle',
   myHp: VERSUS_HP,
@@ -135,6 +137,7 @@ function startMatch(role: 'host' | 'join') {
   useGameStore.getState().startVersus(useVersusStore.getState().myRifle)
   useVersusStore.getState().patch({
     phase: 'playing',
+    step: '',
     myHp: VERSUS_HP,
     remoteHp: VERSUS_HP,
     myWins: 0,
@@ -296,7 +299,7 @@ function cleanupPeer() {
 
 function wireHostPeer(p: Peer) {
   p.on('open', () => {
-    if (p.id) useVersusStore.getState().patch({ code: p.id })
+    if (p.id) useVersusStore.getState().patch({ code: p.id, step: '' })
   })
   p.on('connection', (c) => {
     if (conn && conn.open) {
@@ -341,7 +344,7 @@ function wireHostPeer(p: Peer) {
         return
       }
     }
-    useVersusStore.getState().patch({ phase: 'off', error: '開房失敗，請再試一次' })
+    useVersusStore.getState().patch({ phase: 'off', error: '開房失敗，請再試一次', step: '' })
   })
 }
 
@@ -353,7 +356,14 @@ function registerHost() {
 
 export function hostVersus(rifle: WeaponId) {
   cleanupPeer()
-  useVersusStore.getState().patch({ phase: 'hosting', code: '', error: '', myRifle: rifle, result: null })
+  useVersusStore.getState().patch({
+    phase: 'hosting',
+    code: '',
+    error: '',
+    step: '聯絡配對伺服器…',
+    myRifle: rifle,
+    result: null,
+  })
   registerHost()
 }
 
@@ -364,21 +374,31 @@ export function joinVersus(code: string, rifle: WeaponId) {
     useVersusStore.getState().patch({ error: '房碼係 6 個字元' })
     return
   }
-  useVersusStore.getState().patch({ phase: 'joining', code: clean, error: '', myRifle: rifle, result: null })
+  useVersusStore.getState().patch({
+    phase: 'joining',
+    code: clean,
+    error: '',
+    step: '聯絡配對伺服器…',
+    myRifle: rifle,
+    result: null,
+  })
   const p = new Peer(PEER_OPTIONS)
   peer = p
   p.on('open', () => {
+    useVersusStore.getState().patch({ step: '搵到伺服器，建立緊連線…' })
     const c = p.connect(clean, { reliable: true })
     wireConnection(c, 'join')
     joinTimer = setTimeout(() => {
       if (!started) {
+        const stuckAt = useVersusStore.getState().step
         cleanupPeer()
         useVersusStore.getState().patch({
           phase: 'off',
-          error: '連接超時：個房碼可能過咗期。叫房主撳「取消」再開一次房，用新碼再試',
+          step: '',
+          error: `連接超時（卡喺：${stuckAt}）。叫房主撳「取消」再開一次房，用新碼再試；兩邊都要重新整理頁面`,
         })
       }
-    }, 8000)
+    }, 20000)
   })
   p.on('disconnected', () => {
     if (peer !== p || started) return
@@ -394,10 +414,11 @@ export function joinVersus(code: string, rifle: WeaponId) {
     if (type === 'peer-unavailable') {
       useVersusStore.getState().patch({
         phase: 'off',
+        step: '',
         error: '搵唔到呢個房：檢查下房碼啱唔啱，或者叫房主開多次房攞個新碼',
       })
     } else {
-      useVersusStore.getState().patch({ phase: 'off', error: '連線伺服器出錯，請再試一次' })
+      useVersusStore.getState().patch({ phase: 'off', step: '', error: '連線伺服器出錯，請再試一次' })
     }
   })
 }
@@ -409,6 +430,7 @@ export function leaveVersus() {
     phase: 'off',
     code: '',
     error: '',
+    step: '',
     result: null,
     invincibleUntil: 0,
     remoteInvincible: false,

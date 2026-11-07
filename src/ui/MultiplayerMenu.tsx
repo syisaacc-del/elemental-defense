@@ -4,11 +4,14 @@ import { hostVersus, joinVersus, leaveVersus, useVersusStore } from '../game/net
 import type { WeaponId } from '../types/game.ts'
 
 const RIFLE_CHOICES: WeaponId[] = ['water-rifle', 'thunder-rifle']
+// 每次出新版就改呢個號碼，等玩家可以對照兩邊係咪同一版本
+const APP_VERSION = '2026-11-07 b'
 
 export function MultiplayerMenu({ onClose }: { onClose: () => void }) {
   const phase = useVersusStore((state) => state.phase)
   const code = useVersusStore((state) => state.code)
   const error = useVersusStore((state) => state.error)
+  const step = useVersusStore((state) => state.step)
   const [rifle, setRifle] = useState<WeaponId>('water-rifle')
   const [joinCode, setJoinCode] = useState('')
 
@@ -70,7 +73,7 @@ export function MultiplayerMenu({ onClose }: { onClose: () => void }) {
             <div className="my-2 text-3xl font-black tracking-[0.3em] text-cyan-200">
               {(code || '······').toUpperCase()}
             </div>
-            <div className="mb-3 text-sm text-white/70">等待对手加入…</div>
+            <div className="mb-3 text-sm text-white/70">{step || '等待对手加入…'}</div>
             <button
               type="button"
               onClick={() => leaveVersus()}
@@ -107,10 +110,14 @@ export function MultiplayerMenu({ onClose }: { onClose: () => void }) {
                 {phase === 'joining' ? '连接中…' : '加入'}
               </button>
             </div>
+            {phase === 'joining' && step && (
+              <p className="text-center text-xs text-white/60">{step}</p>
+            )}
           </div>
         )}
 
         {error && <p className="mt-4 text-center text-sm font-semibold text-rose-300">{error}</p>}
+        <div className="mt-4 text-right text-[10px] text-white/25">版本 {APP_VERSION}</div>
       </div>
     </div>
   )
