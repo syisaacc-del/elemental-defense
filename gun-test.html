@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8" />
+<title>槍械模型測試</title>
+<style>
+  body { margin: 0; background: #223; }
+  #bar { position: fixed; top: 8px; left: 8px; z-index: 9; font: 14px sans-serif; }
+  #bar button { margin-right: 6px; padding: 6px 10px; }
+</style>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/"
+  }
+}
+</script>
+</head>
+<body>
+<div id="bar">
+  <button data-gun="watergun.glb">水槍</button>
+  <button data-gun="thundergun.glb">雷槍</button>
+  <button data-gun="icegun.glb">冰槍</button>
+  <button data-gun="windgun.glb">風槍</button>
+  <button data-gun="fire%20gun.glb">火槍</button>
+  <button data-gun="glassgun.glb">草槍</button>
+</div>
+<script type="module">
+import * as THREE from 'three'
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
+
+const renderer = new THREE.WebGLRenderer({ antialias: true })
+renderer.setSize(innerWidth, innerHeight)
+renderer.shadowMap.enabled = true
+document.body.appendChild(renderer.domElement)
+
+const scene = new THREE.Scene()
+scene.background = new THREE.Color(0x2a3550)
+const camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.01, 100)
+camera.position.set(0.8, 0.5, 0.8)
+
+const controls = new OrbitControls(camera, renderer.domElement)
+controls.target.set(0, 0.1, 0)
+
+scene.add(new THREE.HemisphereLight(0xffffff, 0x445566, 1.2))
+const sun = new THREE.DirectionalLight(0xffffff, 2)
+sun.position.set(2, 4, 3)
+scene.add(sun)
+scene.add(new THREE.GridHelper(2, 20, 0x666666, 0x444444))
+
+const loader = new GLTFLoader()
+let current = null
+window.__dbg = { THREE, scene, get current() { return current } }
+function load(file) {
+  if (current) { scene.remove(current); current = null }
+  loader.load(`/models/weapons/${file}?v=2`, (gltf) => {
+    current = gltf.scene
+    scene.add(current)
+    const box = new THREE.Box3().setFromObject(current)
+    const size = box.getSize(new THREE.Vector3())
+    console.log('loaded', file, 'size', size.toArray().map(v => +v.toFixed(3)))
+  }, undefined, (err) => console.error('load error', err))
+}
+document.querySelectorAll('#bar button').forEach((btn) => {
+  btn.addEventListener('click', () => load(btn.dataset.gun))
+})
+load('watergun.glb')
+
+renderer.setAnimationLoop(() => { controls.update(); renderer.render(scene, camera) })
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight
+  camera.updateProjectionMatrix()
+  renderer.setSize(innerWidth, innerHeight)
+})
+</script>
+</body>
+</html>
