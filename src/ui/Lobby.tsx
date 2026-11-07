@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { MATCH_SECONDS, WEAPON_LIST, getWeapon } from '../data/weapons.ts'
 import { playTheme } from '../game/themeMusic.ts'
 import { formatTime } from '../game/formatTime.ts'
@@ -5,6 +6,7 @@ import { useIsTouch } from '../game/useIsTouch.ts'
 import { formatKey, useSettingsStore } from '../store/settingsStore.ts'
 import { useGameStore } from '../store/gameStore.ts'
 import type { WeaponDef } from '../types/game.ts'
+import { MultiplayerMenu } from './MultiplayerMenu.tsx'
 
 function WeaponCard({ weapon, selected, locked }: { weapon: WeaponDef; selected: boolean; locked: boolean }) {
   const toggleWeapon = useGameStore((state) => state.toggleWeapon)
@@ -59,6 +61,7 @@ export function Lobby() {
   const setPointerLocked = useGameStore((state) => state.setPointerLocked)
   const isTouch = useIsTouch()
   const keys = useSettingsStore((state) => state.keys)
+  const [showMultiplayer, setShowMultiplayer] = useState(false)
 
   if (phase !== 'lobby') return null
 
@@ -116,6 +119,13 @@ export function Lobby() {
           >
             开始游戏
           </button>
+          <button
+            type="button"
+            onClick={() => setShowMultiplayer(true)}
+            className="rounded-full border border-fuchsia-300/50 bg-fuchsia-400/15 px-10 py-3 text-lg font-bold text-fuchsia-100 transition hover:bg-fuchsia-400/25"
+          >
+            多人对战（1v1）
+          </button>
           <p className="text-sm text-white/55">
             {canStart
               ? isTouch
@@ -125,6 +135,7 @@ export function Lobby() {
           </p>
         </div>
       </div>
+      {showMultiplayer && <MultiplayerMenu onClose={() => setShowMultiplayer(false)} />}
     </div>
   )
 }

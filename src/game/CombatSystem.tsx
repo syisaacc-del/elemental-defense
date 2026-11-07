@@ -12,6 +12,7 @@ import { useSettingsStore } from '../store/settingsStore.ts'
 import type { FireResult } from '../types/game.ts'
 import { damageEnemiesAt } from './enemies/registry.ts'
 import { playShotSound } from './combatAudio.ts'
+import { isVersus, remoteRayHit, versusSendHit, versusSendShot } from './net/peer.ts'
 import { detectTouch, touchInput } from './touchInput.ts'
 import {
   ENEMY_HIT_RADIUS,
@@ -206,7 +207,27 @@ export function CombatSystem({ playerBody }: { playerBody: RefObject<RapierRigid
       undefined,
       playerBody.current ?? undefined,
     )
-    const distance = hit ? hit.timeOfImpact : SHOT_RANGE
+    let distance = hit ? hit.timeOfImpact : SHOT_RANGE
+    if (isVersus()) {
+      versusSendShot(
+        [origin.current.x, origin.current.y, origin.current.z],
+        [direction.current.x, direction.current.y, direction.current.z],
+        shot.element,
+      )
+      const remoteDist = remoteRayHit(
+        origin.current.x,
+        origin.current.y,
+        origin.current.z,
+        direction.current.x,
+        direction.current.y,
+        direction.current.z,
+        distance,
+      )
+      if (remoteDist !== null) {
+        distance = remoteDist
+        versusSendHit(shot.damage)
+      }
+    }
     const end = origin.current.clone().addScaledVector(direction.current, distance)
     const id = nextFxId++
 

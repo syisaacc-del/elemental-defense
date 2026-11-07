@@ -11,6 +11,7 @@ import type { EndReason, FireResult, GamePhase, LoadoutWeapon, WeaponId } from '
 
 type GameStore = {
   phase: GamePhase
+  mode: 'solo' | 'versus'
   score: number
   timeLeft: number
   playerHp: number
@@ -27,6 +28,7 @@ type GameStore = {
   weaponReadyAt: number
   toggleWeapon: (id: WeaponId) => void
   startGame: () => boolean
+  startVersus: (rifle: WeaponId) => void
   switchSlot: (slot: 0 | 1) => void
   cycleWeapon: () => void
   setPointerLocked: (locked: boolean) => void
@@ -65,6 +67,7 @@ function patchSlot(
 
 export const useGameStore = create<GameStore>((set, get) => ({
   phase: 'lobby',
+  mode: 'solo',
   score: START_SCORE,
   timeLeft: MATCH_SECONDS,
   playerHp: START_PLAYER_HP,
@@ -103,6 +106,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
     set({
       phase: 'playing',
+      mode: 'solo',
       score: START_SCORE,
       timeLeft: MATCH_SECONDS,
       playerHp: START_PLAYER_HP,
@@ -117,6 +121,26 @@ export const useGameStore = create<GameStore>((set, get) => ({
       endReason: null,
     })
     return true
+  },
+
+  startVersus: (rifle) => {
+    if (get().phase !== 'lobby') return
+    set({
+      phase: 'playing',
+      mode: 'versus',
+      score: START_SCORE,
+      timeLeft: MATCH_SECONDS,
+      playerHp: 400,
+      baseHp: START_BASE_HP,
+      currentSlot: 0,
+      loadout: [createLoadoutWeapon(rifle), createLoadoutWeapon(rifle)],
+      isAiming: false,
+      cameraMode: 'fps',
+      weaponReadyAt: 0,
+      kills: 0,
+      leaks: 0,
+      endReason: null,
+    })
   },
 
   switchSlot: (slot) => {
@@ -274,6 +298,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   resetToLobby: () => {
     set({
       phase: 'lobby',
+      mode: 'solo',
       score: START_SCORE,
       timeLeft: MATCH_SECONDS,
       playerHp: START_PLAYER_HP,

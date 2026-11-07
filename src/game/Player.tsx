@@ -24,7 +24,7 @@ import { ViewWeapon } from './ViewWeapon.tsx'
 export function Player() {
   const body = useRef<RapierRigidBody>(null)
   const jumpHeld = useRef(false)
-  const { camera } = useThree()
+  const { camera, scene } = useThree()
   const { rapier, world } = useRapier()
   const [, getKeys] = useKeyboardControls()
   const setPointerLocked = useGameStore((state) => state.setPointerLocked)
@@ -43,6 +43,13 @@ export function Player() {
 
   useFrame((_, delta) => {
     if (!body.current) return
+
+    if (playerMotion.pendingSpawn) {
+      const [sx, sy, sz] = playerMotion.pendingSpawn
+      body.current.setTranslation({ x: sx, y: sy, z: sz }, true)
+      body.current.setLinvel({ x: 0, y: 0, z: 0 }, true)
+      playerMotion.pendingSpawn = null
+    }
 
     if (isTouch && !settingsOpen) {
       const look = consumeLook()
@@ -95,6 +102,17 @@ export function Player() {
     playerMotion.walking = walking && playerMotion.moveSpeed > 0.2
     playerMotion.grounded = grounded
     playerMotion.airborne = !grounded && !paused
+    playerMotion.x = position.x
+    playerMotion.y = position.y
+    playerMotion.z = position.z
+    playerMotion.yaw = Math.atan2(worldForward.x, worldForward.z)
+
+    // 開發模式：暴露相機同場景俾調試用（正式版唔會有）
+    if (import.meta.env.DEV) {
+      const w = window as unknown as Record<string, unknown>
+      w.__cam = camera
+      w.__scene = scene
+    }
 
     const jumping = !paused && (jump || touchInput.jump)
     if (jumping && grounded && !jumpHeld.current) {

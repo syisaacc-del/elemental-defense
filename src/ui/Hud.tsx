@@ -8,6 +8,7 @@ import { useGameStore } from '../store/gameStore.ts'
 
 export function Hud() {
   const phase = useGameStore((state) => state.phase)
+  const mode = useGameStore((state) => state.mode)
   const score = useGameStore((state) => state.score)
   const timeLeft = useGameStore((state) => state.timeLeft)
   const playerHp = useGameStore((state) => state.playerHp)
@@ -23,6 +24,7 @@ export function Hud() {
   const keys = useSettingsStore((state) => state.keys)
 
   if (phase !== 'playing' || !loadout) return null
+  if (mode === 'versus') return null
 
   const current = loadout[currentSlot]
   const weapon = getWeapon(current.id)
@@ -84,7 +86,7 @@ export function Hud() {
   )
 }
 
-function Crosshair() {
+export function Crosshair() {
   return (
     <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
       <div className="relative h-5 w-5">
@@ -116,7 +118,7 @@ function ScopeOverlay() {
   )
 }
 
-function ReloadHint() {
+export function ReloadHint() {
   const loadout = useGameStore((state) => state.loadout)
   const currentSlot = useGameStore((state) => state.currentSlot)
   const current = loadout?.[currentSlot]

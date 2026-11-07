@@ -21,10 +21,10 @@ export function MobileControls() {
       <LookPad />
       <Joystick />
       <div
-        className="absolute right-3 flex flex-col items-end gap-2"
-        style={{ bottom: 'max(1.25rem, env(safe-area-inset-bottom))' }}
+        className="absolute right-4 flex flex-col items-end gap-3"
+        style={{ bottom: 'max(1.5rem, env(safe-area-inset-bottom))' }}
       >
-        <div className="mb-1 flex gap-2">
+        <div className="flex gap-3">
           <ActionButton
             label={cameraMode === 'fps' ? '第三人称' : '第一人称'}
             onPress={() => useGameStore.getState().toggleCameraMode()}
@@ -34,7 +34,7 @@ export function MobileControls() {
             onPress={() => useGameStore.getState().beginReload(performance.now())}
           />
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-3">
           <ActionButton
             label="1"
             active={currentSlot === 0}
@@ -52,7 +52,7 @@ export function MobileControls() {
             }}
           />
         </div>
-        <div className="mt-1 flex items-end gap-3">
+        <div className="mt-1 flex items-end gap-4">
           <HoldButton
             label="瞄准"
             active={isAiming}
@@ -137,8 +137,8 @@ function Joystick() {
   return (
     <div
       ref={base}
-      className="absolute left-4 h-32 w-32 rounded-full border border-white/25 bg-black/25"
-      style={{ bottom: 'max(1.25rem, env(safe-area-inset-bottom))', touchAction: 'none' }}
+      className="absolute left-4 h-40 w-40 rounded-full border border-white/25 bg-black/25"
+      style={{ bottom: 'max(1.5rem, env(safe-area-inset-bottom))', touchAction: 'none' }}
       onPointerDown={(event) => {
         event.stopPropagation()
         pointer.current = event.pointerId
@@ -157,7 +157,7 @@ function Joystick() {
       onPointerCancel={stop}
     >
       <div
-        className="absolute left-1/2 top-1/2 h-14 w-14 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white/45"
+        className="absolute left-1/2 top-1/2 h-16 w-16 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white/45"
         style={{ transform: `translate(calc(-50% + ${knob.x}px), calc(-50% + ${knob.y}px))` }}
       />
     </div>
@@ -176,7 +176,7 @@ function ActionButton({
   return (
     <button
       type="button"
-      className={`min-w-14 rounded-full border px-3 py-2 text-sm font-bold ${
+      className={`min-w-20 rounded-2xl border px-4 py-3 text-base font-bold ${
         active ? 'border-cyan-300 bg-cyan-400/25 text-white' : 'border-white/25 bg-black/45 text-white'
       }`}
       style={{ touchAction: 'none' }}
@@ -205,7 +205,7 @@ function HoldButton({
     <button
       type="button"
       className={`rounded-full border font-bold text-white ${
-        large ? 'h-20 w-20 text-lg' : 'min-w-14 px-3 py-2 text-sm'
+        large ? 'h-24 w-24 text-xl' : 'min-w-20 px-4 py-3 text-base'
       } ${active ? 'border-cyan-300 bg-cyan-400/30' : 'border-white/30 bg-black/50'}`}
       style={{ touchAction: 'none' }}
       onPointerDown={(event) => {

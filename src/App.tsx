@@ -6,11 +6,13 @@ import { useSettingsSync } from './game/useSettingsSync.ts'
 import { useThemeMusic } from './game/useThemeMusic.ts'
 import { useWeaponHotkeys } from './game/useWeaponHotkeys.ts'
 import { useSettingsStore } from './store/settingsStore.ts'
+import { FullscreenButton } from './ui/FullscreenButton.tsx'
 import { GameOver } from './ui/GameOver.tsx'
 import { Hud } from './ui/Hud.tsx'
 import { Lobby } from './ui/Lobby.tsx'
 import { MobileControls } from './ui/MobileControls.tsx'
 import { SettingsMenu } from './ui/SettingsMenu.tsx'
+import { VersusHud } from './ui/VersusHud.tsx'
 
 export default function App() {
   const keys = useSettingsStore((state) => state.keys)
@@ -35,9 +37,11 @@ export default function App() {
         <GameCanvas />
         <Lobby />
         <Hud />
+        <VersusHud />
         <MobileControls />
         <GameOver />
         <SettingsMenu />
+        <FullscreenButton />
       </div>
     </KeyboardControls>
   )

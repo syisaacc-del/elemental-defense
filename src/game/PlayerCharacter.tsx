@@ -19,6 +19,7 @@ import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js'
 import { getWeapon } from '../data/weapons.ts'
 import { useGameStore } from '../store/gameStore.ts'
 import type { WeaponId } from '../types/game.ts'
+import { remotePlayer, remoteRecoil, useVersusStore } from './net/peer.ts'
 import { playerMotion } from './playerMotion.ts'
 import { fitViewmodel, gunUrl } from './weaponModels.ts'
 
@@ -118,9 +119,11 @@ function TpsGun({ weaponId }: { weaponId: WeaponId }) {
 function FbxCharacter({
   body,
   visible,
+  remote = false,
 }: {
   body: RefObject<RapierRigidBody | null>
   visible: boolean
+  remote?: boolean
 }) {
   const root = useRef<Group>(null)
   const scaled = useRef<Group>(null)
@@ -137,8 +140,10 @@ function FbxCharacter({
   const currentSlot = useGameStore((state) => state.currentSlot)
   const loadout = useGameStore((state) => state.loadout)
   const isAiming = useGameStore((state) => state.isAiming)
+  const versusRifle = useVersusStore((state) => state.remoteRifle)
+  const shieldOn = useVersusStore((state) => state.remoteInvincible)
   const current = loadout?.[currentSlot]
-  const weapon = current ? getWeapon(current.id) : null
+  const weapon = remote ? getWeapon(versusRifle) : current ? getWeapon(current.id) : null
 
   const { model, scale } = useMemo(() => {
     const cloned = cloneSkinned(idleFbx) as Group
@@ -206,36 +211,69 @@ function FbxCharacter({
   }, [mixerData, model])
 
   useFrame((state, delta) => {
-    if (!root.current || !body.current) return
-    const pos = body.current.translation()
-    root.current.position.set(pos.x, pos.y - 0.85, pos.z)
-    state.camera.getWorldDirection(look)
-    look.y = 0
-    if (look.lengthSq() > 0.0001) {
-      look.normalize()
-      root.current.rotation.y = Math.atan2(look.x, look.z)
+    if (!root.current) return
+
+    let moving: boolean
+    let walking: boolean
+    let airborne: boolean
+
+    if (remote) {
+      const feet = remotePlayer.y - 0.85
+      const dx = remotePlayer.x - root.current.position.x
+      const dy = feet - root.current.position.y
+      const dz = remotePlayer.z - root.current.position.z
+      if (dx * dx + dy * dy + dz * dz > 9) {
+        root.current.position.set(remotePlayer.x, feet, remotePlayer.z)
+      } else {
+        const follow = Math.min(1, delta * 12)
+        root.current.position.x += dx * follow
+        root.current.position.y += dy * follow
+        root.current.position.z += dz * follow
+      }
+      root.current.rotation.y = remotePlayer.yaw
+      moving = remotePlayer.speed > 0.35
+      walking = false
+      airborne = remotePlayer.airborne
+    } else {
+      if (!body.current) return
+      const pos = body.current.translation()
+      root.current.position.set(pos.x, pos.y - 0.85, pos.z)
+      state.camera.getWorldDirection(look)
+      look.y = 0
+      if (look.lengthSq() > 0.0001) {
+        look.normalize()
+        root.current.rotation.y = Math.atan2(look.x, look.z)
+      }
+      moving = playerMotion.moveSpeed > 0.35
+      walking = moving && playerMotion.walking
+      airborne = playerMotion.airborne
     }
 
-    const moving = playerMotion.moveSpeed > 0.35
-    const walking = moving && playerMotion.walking
-    const running = moving && !playerMotion.walking
-    lerpWeight(mixerData.idle, moving || playerMotion.airborne ? 0.12 : 1, delta)
-    lerpWeight(mixerData.run, running && !playerMotion.airborne ? 1 : 0, delta)
-    lerpWeight(mixerData.walk, walking && !playerMotion.airborne ? 1 : 0, delta)
+    const running = moving && !walking
+    lerpWeight(mixerData.idle, moving || airborne ? 0.12 : 1, delta)
+    lerpWeight(mixerData.run, running && !airborne ? 1 : 0, delta)
+    lerpWeight(mixerData.walk, walking && !airborne ? 1 : 0, delta)
     mixerData.mixer.update(delta)
 
-    if (current && lastAmmo.current !== null && current.ammoInMag < lastAmmo.current) {
-      recoil.current = weapon?.kind === 'sniper' ? 1 : weapon?.kind === 'launcher' ? 0.85 : 0.55
+    if (remote) {
+      if (remoteRecoil.pulse > 0.5) {
+        recoil.current = 0.55
+        remoteRecoil.pulse = 0
+      }
+    } else {
+      if (current && lastAmmo.current !== null && current.ammoInMag < lastAmmo.current) {
+        recoil.current = weapon?.kind === 'sniper' ? 1 : weapon?.kind === 'launcher' ? 0.85 : 0.55
+      }
+      lastAmmo.current = current?.ammoInMag ?? null
     }
-    lastAmmo.current = current?.ammoInMag ?? null
     recoil.current += (0 - recoil.current) * Math.min(1, delta * 9)
 
-    const reloadT = current?.isReloading
+    const reloadT = !remote && current?.isReloading
       ? 1 - Math.max(0, current.reloadEndsAt - performance.now()) / (getWeapon(current.id).reloadTime * 1000)
       : 0
-    aimBlend.current += ((isAiming ? 1 : 0) - aimBlend.current) * Math.min(1, delta * 8)
-    jumpBlend.current += ((playerMotion.airborne ? 1 : 0) - jumpBlend.current) * Math.min(1, delta * 10)
-    reloadBlend.current += ((current?.isReloading ? 1 : 0) - reloadBlend.current) * Math.min(1, delta * 10)
+    aimBlend.current += ((isAiming && !remote ? 1 : 0) - aimBlend.current) * Math.min(1, delta * 8)
+    jumpBlend.current += ((airborne ? 1 : 0) - jumpBlend.current) * Math.min(1, delta * 10)
+    reloadBlend.current += ((!remote && current?.isReloading ? 1 : 0) - reloadBlend.current) * Math.min(1, delta * 10)
 
     applyAim(bones, aimBlend.current)
     applyJump(bones, jumpBlend.current)
@@ -265,6 +303,12 @@ function FbxCharacter({
       <group ref={gunRoot}>
         {weapon && <TpsGun key={weapon.id} weaponId={weapon.id} />}
       </group>
+      {remote && shieldOn && (
+        <mesh position={[0, 0.95, 0]}>
+          <sphereGeometry args={[1.05, 20, 16]} />
+          <meshBasicMaterial color="#67e8f9" transparent opacity={0.16} depthWrite={false} />
+        </mesh>
+      )}
     </group>
   )
 }
@@ -368,6 +412,16 @@ export function PlayerAvatar({
   return (
     <Suspense fallback={<CapsuleDummy body={body} visible={visible} />}>
       <FbxCharacter body={body} visible={visible} />
+    </Suspense>
+  )
+}
+
+const EMPTY_BODY: RefObject<RapierRigidBody | null> = { current: null }
+
+export function RemoteAvatar() {
+  return (
+    <Suspense fallback={null}>
+      <FbxCharacter body={EMPTY_BODY} visible remote />
     </Suspense>
   )
 }

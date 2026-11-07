@@ -7,6 +7,7 @@ export function useGameLoop() {
 
   useEffect(() => {
     if (phase !== 'playing') return
+    if (useGameStore.getState().mode === 'versus') return
 
     const timer = window.setInterval(() => {
       if (useSettingsStore.getState().settingsOpen) return

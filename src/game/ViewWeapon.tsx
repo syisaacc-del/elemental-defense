@@ -1,6 +1,6 @@
 import { useGLTF } from '@react-three/drei'
 import { useFrame, useThree } from '@react-three/fiber'
-import { useEffect, useMemo, useRef } from 'react'
+import { Suspense, useEffect, useMemo, useRef } from 'react'
 import { Group, Mesh } from 'three'
 import { getWeapon } from '../data/weapons.ts'
 import { useGameStore } from '../store/gameStore.ts'
@@ -132,7 +132,10 @@ export function ViewWeapon() {
   return (
     <group ref={root}>
       <group ref={local} position={[0.28, -0.24, -0.58]}>
-        <GunModel key={weapon.id} weaponId={weapon.id} />
+        {/* 獨立 Suspense：槍模型未載入時唔會阻住成個場景，載入完自己裝上 */}
+        <Suspense fallback={null}>
+          <GunModel key={weapon.id} weaponId={weapon.id} />
+        </Suspense>
         <mesh ref={muzzle} position={[0.01, 0.03, -0.52]} visible={false}>
           <sphereGeometry args={[0.07, 10, 10]} />
           <meshBasicMaterial color="#ffd27a" transparent opacity={0.9} />
