@@ -1,11 +1,11 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { getWeapon } from '../data/weapons.ts'
-import { hostVersus, joinVersus, leaveVersus, useVersusStore } from '../game/net/peer.ts'
+import { hostVersus, hostVersusLan, joinVersus, joinVersusLan, leaveVersus, useVersusStore } from '../game/net/peer.ts'
 import type { WeaponId } from '../types/game.ts'
 
 const RIFLE_CHOICES: WeaponId[] = ['water-rifle', 'thunder-rifle']
 // 每次出新版就改呢個號碼，等玩家可以對照兩邊係咪同一版本
-const APP_VERSION = '2026-11-07 b'
+const APP_VERSION = '2026-11-07 c'
 
 export function MultiplayerMenu({ onClose }: { onClose: () => void }) {
   const phase = useVersusStore((state) => state.phase)
@@ -14,6 +14,17 @@ export function MultiplayerMenu({ onClose }: { onClose: () => void }) {
   const step = useVersusStore((state) => state.step)
   const [rifle, setRifle] = useState<WeaponId>('water-rifle')
   const [joinCode, setJoinCode] = useState('')
+  const [lanAddr, setLanAddr] = useState('')
+
+  useEffect(() => {
+    if (!import.meta.env.DEV) return
+    fetch('/lan-info')
+      .then((res) => res.json())
+      .then((data: { ip?: string }) => {
+        if (data?.ip) setLanAddr(`http://${data.ip}:${location.port}`)
+      })
+      .catch(() => {})
+  }, [])
 
   const busy = phase === 'hosting' || phase === 'joining'
 
@@ -112,6 +123,38 @@ export function MultiplayerMenu({ onClose }: { onClose: () => void }) {
             </div>
             {phase === 'joining' && step && (
               <p className="text-center text-xs text-white/60">{step}</p>
+            )}
+
+            {import.meta.env.DEV && (
+              <>
+                <div className="mt-1 flex items-center gap-2 text-[11px] text-white/35">
+                  <div className="h-px flex-1 bg-white/10" />
+                  屋企同一個 WiFi 用（區網模式）
+                  <div className="h-px flex-1 bg-white/10" />
+                </div>
+                <p className="text-xs leading-relaxed text-white/50">
+                  朋友喺同一個 WiFi 下，用瀏覽器開呢個網址：
+                  <span className="font-bold text-emerald-300">{lanAddr || '讀取中…'}</span>
+                </p>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => hostVersusLan(rifle)}
+                    disabled={busy}
+                    className="flex-1 rounded-full bg-emerald-400 px-4 py-3 text-sm font-bold text-slate-950 transition hover:bg-emerald-300 disabled:opacity-50"
+                  >
+                    區網開房
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => joinVersusLan(joinCode, rifle)}
+                    disabled={busy || joinCode.trim().length !== 6}
+                    className="flex-1 rounded-full border border-emerald-300/50 bg-emerald-400/10 px-4 py-3 text-sm font-bold text-emerald-200 transition hover:bg-emerald-400/20 disabled:opacity-50"
+                  >
+                    區網加入（用上面個碼）
+                  </button>
+                </div>
+              </>
             )}
           </div>
         )}

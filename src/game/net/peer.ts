@@ -1,5 +1,4 @@
 import Peer from 'peerjs'
-import type { DataConnection } from 'peerjs'
 import { create } from 'zustand'
 import { useGameStore } from '../../store/gameStore.ts'
 import type { ElementId, WeaponId } from '../../types/game.ts'
@@ -10,17 +9,11 @@ export const VERSUS_HP = 400
 export const VERSUS_WINS_NEEDED = 2
 export const SPAWN_SHIELD_MS = 2000
 
-// STUN + TURN servers: without TURN, two players on "closed" networks
-// (e.g. phone on 4G, strict office wifi) can never reach each other.
-// OpenRelay is a free public TURN service that relays traffic as last resort.
+// STUN servers for internet play. (Public free TURN relays have all shut
+// down — for same-WiFi play use the LAN mode below, which needs no internet.)
 const PEER_OPTIONS = {
   config: {
-    iceServers: [
-      { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] },
-      { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
-      { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
-      { urls: 'turn:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' },
-    ],
+    iceServers: [{ urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] }],
   },
 }
 
@@ -101,11 +94,22 @@ export const useVersusStore = create<VersusStore>((set) => ({
   patch: set,
 }))
 
+// Minimal shape of a game channel: PeerJS DataConnection (internet play)
+// and LanChannel (same-wifi play) both satisfy it.
+export interface ConnLike {
+  open: boolean
+  send: (data: unknown) => void
+  close: () => void
+  on: (event: string, cb: (...args: any[]) => void) => void
+}
+
 let peer: Peer | null = null
-let conn: DataConnection | null = null
+let conn: ConnLike | null = null
 let started = false
 let hostRetries = 0
 let joinTimer: ReturnType<typeof setTimeout> | null = null
+let lanWs: WebSocket | null = null
+let lanTimer: ReturnType<typeof setTimeout> | null = null
 
 export function isVersus() {
   return useGameStore.getState().mode === 'versus'
@@ -248,7 +252,7 @@ function onMessage(msg: VersusMessage, role: 'host' | 'join') {
   }
 }
 
-function wireConnection(c: DataConnection, role: 'host' | 'join') {
+function wireConnection(c: ConnLike, role: 'host' | 'join') {
   conn = c
   c.on('open', () => {
     if (joinTimer) {
@@ -272,6 +276,18 @@ function cleanupPeer() {
   if (joinTimer) {
     clearTimeout(joinTimer)
     joinTimer = null
+  }
+  if (lanTimer) {
+    clearTimeout(lanTimer)
+    lanTimer = null
+  }
+  if (lanWs) {
+    try {
+      lanWs.close()
+    } catch {
+      // ignore
+    }
+    lanWs = null
   }
   if (conn) {
     try {
@@ -306,7 +322,7 @@ function wireHostPeer(p: Peer) {
       c.on('open', () => c.close())
       return
     }
-    wireConnection(c, 'host')
+    wireConnection(c as unknown as ConnLike, 'host')
   })
   p.on('disconnected', () => {
     // Broker connection dropped (wifi hiccup, sleep mode...) — quietly
@@ -387,7 +403,7 @@ export function joinVersus(code: string, rifle: WeaponId) {
   p.on('open', () => {
     useVersusStore.getState().patch({ step: '搵到伺服器，建立緊連線…' })
     const c = p.connect(clean, { reliable: true })
-    wireConnection(c, 'join')
+    wireConnection(c as unknown as ConnLike, 'join')
     joinTimer = setTimeout(() => {
       if (!started) {
         const stuckAt = useVersusStore.getState().step
@@ -421,6 +437,153 @@ export function joinVersus(code: string, rifle: WeaponId) {
       useVersusStore.getState().patch({ phase: 'off', step: '', error: '連線伺服器出錯，請再試一次' })
     }
   })
+}
+
+// ---------- LAN mode (same wifi): traffic goes through the dev machine's ----------
+// ---------- built-in relay, no internet/NAT involved at all ----------
+
+type LanEnvelope =
+  | { t: 'paired' }
+  | { t: 'err'; msg?: string }
+  | { t: 'peer-left' }
+  | { t: 'm'; d: VersusMessage }
+
+// Wraps the relay WebSocket so it quacks like a PeerJS DataConnection.
+class LanChannel implements ConnLike {
+  open = true
+  private ws: WebSocket
+  private handlers = new Map<string, Array<(...args: any[]) => void>>()
+  constructor(ws: WebSocket) {
+    this.ws = ws
+  }
+  on(event: string, cb: (...args: any[]) => void) {
+    const list = this.handlers.get(event) ?? []
+    list.push(cb)
+    this.handlers.set(event, list)
+  }
+  emitLocal(event: string, arg?: unknown) {
+    for (const cb of this.handlers.get(event) ?? []) cb(arg)
+  }
+  send(data: unknown) {
+    if (this.ws.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify({ t: 'm', d: data }))
+  }
+  close() {
+    try {
+      this.ws.close()
+    } catch {
+      // ignore
+    }
+  }
+}
+
+function lanWsUrl() {
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws'
+  return `${proto}://${location.host}/versus-ws`
+}
+
+function wireLan(ws: WebSocket, role: 'host' | 'join') {
+  let chan: LanChannel | null = null
+  ws.onmessage = (ev) => {
+    let msg: LanEnvelope
+    try {
+      msg = JSON.parse(String(ev.data)) as LanEnvelope
+    } catch {
+      return
+    }
+    if (msg.t === 'm') {
+      if (chan) chan.emitLocal('data', msg.d)
+      return
+    }
+    if (msg.t === 'paired') {
+      chan = new LanChannel(ws)
+      wireConnection(chan, role)
+      setTimeout(() => chan?.emitLocal('open'), 0)
+      return
+    }
+    if (msg.t === 'peer-left') {
+      if (chan) chan.emitLocal('close')
+      return
+    }
+    if (msg.t === 'err') {
+      if (started) return
+      const text = msg.msg === 'no-room'
+        ? '搵唔到呢個房：檢查個碼啱唔啱，或者房主未開房'
+        : '間房滿咗／個碼撞咗，開多次房攞個新碼'
+      cleanupPeer()
+      useVersusStore.getState().patch({ phase: 'off', step: '', error: text })
+    }
+  }
+  ws.onclose = () => {
+    if (lanWs === ws) lanWs = null
+    if (chan) {
+      chan.emitLocal('close')
+      return
+    }
+    const v = useVersusStore.getState()
+    if (!started && (v.phase === 'hosting' || v.phase === 'joining')) {
+      v.patch({ phase: 'off', step: '', error: '區網中繼斷咗線，請再試一次' })
+    }
+  }
+}
+
+export function hostVersusLan(rifle: WeaponId) {
+  cleanupPeer()
+  const code = makeCode()
+  useVersusStore.getState().patch({
+    phase: 'hosting',
+    code: '',
+    error: '',
+    step: '聯絡區網中繼…',
+    myRifle: rifle,
+    result: null,
+  })
+  const ws = new WebSocket(lanWsUrl())
+  lanWs = ws
+  wireLan(ws, 'host')
+  ws.onopen = () => {
+    ws.send(JSON.stringify({ t: 'host', code }))
+    useVersusStore.getState().patch({ code, step: '' })
+  }
+  ws.onerror = () => {
+    useVersusStore.getState().patch({ phase: 'off', step: '', error: '連唔到區網中繼，請再試一次' })
+  }
+}
+
+export function joinVersusLan(code: string, rifle: WeaponId) {
+  cleanupPeer()
+  const clean = code.trim().toLowerCase()
+  if (clean.length !== 6) {
+    useVersusStore.getState().patch({ error: '房碼係 6 個字元' })
+    return
+  }
+  useVersusStore.getState().patch({
+    phase: 'joining',
+    code: clean,
+    error: '',
+    step: '聯絡區網中繼…',
+    myRifle: rifle,
+    result: null,
+  })
+  const ws = new WebSocket(lanWsUrl())
+  lanWs = ws
+  wireLan(ws, 'join')
+  ws.onopen = () => {
+    useVersusStore.getState().patch({ step: '建立緊連線…' })
+    ws.send(JSON.stringify({ t: 'join', code: clean }))
+    joinTimer = setTimeout(() => {
+      if (!started) {
+        cleanupPeer()
+        useVersusStore.getState().patch({ phase: 'off', step: '', error: '連接超時，請再試一次' })
+      }
+    }, 8000)
+  }
+  ws.onerror = () => {
+    useVersusStore.getState().patch({
+      phase: 'off',
+      step: '',
+      error: '連唔到主機：檢查下係咪同一個 WiFi，同埋個網址啱唔啱',
+    })
+  }
 }
 
 export function leaveVersus() {
