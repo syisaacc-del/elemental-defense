@@ -49,22 +49,38 @@ export class RoomHub implements DurableObject {
     } catch {
       return
     }
-    if (msg.t === 'host' || msg.t === 'join') {
+    if (msg.t === 'host') {
       const code = String(msg.code ?? '')
       const room = this.rooms.get(code) ?? {}
-      this.rooms.set(code, room)
-      const slot = msg.t === 'host' ? ('host' as const) : ('guest' as const)
-      if (room[slot]) {
-        ws.send(JSON.stringify({ t: 'err' }))
+      if (room.host) {
+        // 個碼撞咗，叫房主開多次
+        ws.send(JSON.stringify({ t: 'err', msg: 'room-full' }))
         return
       }
-      room[slot] = ws
+      room.host = ws
+      this.rooms.set(code, room)
       this.roomOf.set(ws, code)
-      ws.send(JSON.stringify({ t: 'claimed' }))
-      if (room.host && room.guest) {
-        room.host.send(JSON.stringify({ t: 'paired' }))
-        room.guest.send(JSON.stringify({ t: 'paired' }))
+      return
+    }
+    if (msg.t === 'join') {
+      const code = String(msg.code ?? '')
+      const room = this.rooms.get(code)
+      if (!room?.host) {
+        ws.send(JSON.stringify({ t: 'err', msg: 'no-room' }))
+        return
       }
+      if (room.guest) {
+        ws.send(JSON.stringify({ t: 'err', msg: 'room-full' }))
+        return
+      }
+      room.guest = ws
+      this.roomOf.set(ws, code)
+      try {
+        room.host.send(JSON.stringify({ t: 'paired' }))
+      } catch {
+        // ignore
+      }
+      ws.send(JSON.stringify({ t: 'paired' }))
       return
     }
     if (msg.t === 'm') {
@@ -85,13 +101,15 @@ export class RoomHub implements DurableObject {
     const room = this.rooms.get(code)
     if (!room) return
     const other = room.host === ws ? room.guest : room.host
-    if (room.host === ws) delete room.host
-    if (room.guest === ws) delete room.guest
-    try {
-      other?.send(JSON.stringify({ t: 'peer-left' }))
-    } catch {
-      // ignore
+    // 一方走咗成間房即棄置：碼即刻可以重用，對方收到 peer-left 會自己收線
+    this.rooms.delete(code)
+    if (other) {
+      this.roomOf.delete(other)
+      try {
+        other.send(JSON.stringify({ t: 'peer-left' }))
+      } catch {
+        // ignore
+      }
     }
-    if (!room.host && !room.guest) this.rooms.delete(code)
   }
 }
