@@ -1,7 +1,7 @@
 import { Box3, Group, Mesh, MeshStandardMaterial, Vector3, type Object3D } from 'three'
 import type { WeaponId } from '../types/game.ts'
 
-export const GUN_FILE: Record<WeaponId, string> = {
+export const GUN_FILE: Partial<Record<WeaponId, string>> = {
   'water-rifle': 'watergun.glb',
   'thunder-rifle': 'thundergun.glb',
   'ice-sniper': 'icegun.glb',
@@ -10,13 +10,19 @@ export const GUN_FILE: Record<WeaponId, string> = {
   'grass-launcher': 'glassgun.glb',
 }
 
+export function hasGunModel(id: WeaponId) {
+  return Boolean(GUN_FILE[id])
+}
+
 const AXIS_X = new Vector3(1, 0, 0)
 const AXIS_Y = new Vector3(0, 1, 0)
 const AXIS_Z = new Vector3(0, 0, 1)
 
 export function gunUrl(id: WeaponId) {
+  const file = GUN_FILE[id]
+  if (!file) throw new Error(`No gun model for ${id}`)
   // ?v=2：水槍模型修過自發光（2026-10-31），避免瀏覽器繼續用舊快取
-  return `${import.meta.env.BASE_URL}models/weapons/${encodeURIComponent(GUN_FILE[id])}?v=2`
+  return `${import.meta.env.BASE_URL}models/weapons/${encodeURIComponent(file)}?v=2`
 }
 
 function isMesh(obj: Object3D): obj is Mesh {

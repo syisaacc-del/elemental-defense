@@ -1,12 +1,16 @@
 import { create } from 'zustand'
+import { AURA_MS, resolveReaction } from '../../data/elements.ts'
+import { VERSUS_HP } from '../../data/weapons.ts'
 import { useGameStore } from '../../store/gameStore.ts'
-import type { ElementId, WeaponId } from '../../types/game.ts'
+import type { ElementId, WeaponId, WeaponKind } from '../../types/game.ts'
 import { VERSUS_HOST_SPAWN, VERSUS_JOIN_SPAWN } from '../map/versusLayout.ts'
 import { playerMotion } from '../playerMotion.ts'
 
-export const VERSUS_HP = 400
+export { VERSUS_HP }
 export const VERSUS_WINS_NEEDED = 2
 export const SPAWN_SHIELD_MS = 2000
+
+export type VersusLoadout = [WeaponId, WeaponId]
 
 // 互聯網對戰：經 Cloudflare 中繼站轉訊息（唔使兩部機直接穿透路由器）。
 // PeerJS 喺同一部機兩個分頁會通，但跨裝置經常卡喺「建立緊連線」。
@@ -15,7 +19,7 @@ const CLOUD_RELAY_URL = 'wss://elemental-defense-relay.chansheungyin102030.worke
 export type VersusPhase = 'off' | 'hosting' | 'joining' | 'playing' | 'ended'
 export type VersusResult = 'win' | 'lose' | 'left'
 
-type HelloMsg = { t: 'hello'; rifle: WeaponId }
+type HelloMsg = { t: 'hello'; weapons: VersusLoadout }
 type StateMsg = {
   t: 's'
   p: [number, number, number]
@@ -24,14 +28,26 @@ type StateMsg = {
   air: boolean
   hp: number
   inv: boolean
+  w: WeaponId
 }
-type ShotMsg = { t: 'shot'; o: [number, number, number]; d: [number, number, number]; el: ElementId }
-type HitMsg = { t: 'hit'; d: number }
+type ShotMsg = {
+  t: 'shot'
+  o: [number, number, number]
+  d: [number, number, number]
+  el: ElementId
+  k: WeaponKind
+}
+type HitMsg = { t: 'hit'; d: number; el: ElementId }
 type DiedMsg = { t: 'died'; round: number }
 type ByeMsg = { t: 'bye' }
 type VersusMessage = HelloMsg | StateMsg | ShotMsg | HitMsg | DiedMsg | ByeMsg
 
-export type RemoteShot = { o: [number, number, number]; d: [number, number, number]; el: ElementId }
+export type RemoteShot = {
+  o: [number, number, number]
+  d: [number, number, number]
+  el: ElementId
+  k: WeaponKind
+}
 
 // Live remote-player state, updated at network rate. Read per-frame by the
 // remote avatar + hit detection. Kept outside zustand to avoid re-render churn.
@@ -58,8 +74,9 @@ type VersusStore = {
   code: string
   error: string
   step: string
-  myRifle: WeaponId
-  remoteRifle: WeaponId
+  myWeapons: VersusLoadout
+  remoteWeapons: VersusLoadout
+  remoteWeapon: WeaponId
   myHp: number
   remoteHp: number
   myWins: number
@@ -68,6 +85,7 @@ type VersusStore = {
   result: VersusResult | null
   invincibleUntil: number
   remoteInvincible: boolean
+  myAura: ElementId | null
   patch: (part: Partial<VersusStore>) => void
 }
 
@@ -76,8 +94,9 @@ export const useVersusStore = create<VersusStore>((set) => ({
   code: '',
   error: '',
   step: '',
-  myRifle: 'water-rifle',
-  remoteRifle: 'water-rifle',
+  myWeapons: ['water-rifle', 'thunder-rifle'],
+  remoteWeapons: ['water-rifle', 'thunder-rifle'],
+  remoteWeapon: 'water-rifle',
   myHp: VERSUS_HP,
   remoteHp: VERSUS_HP,
   myWins: 0,
@@ -86,8 +105,12 @@ export const useVersusStore = create<VersusStore>((set) => ({
   result: null,
   invincibleUntil: 0,
   remoteInvincible: false,
+  myAura: null,
   patch: set,
 }))
+
+let myAuraElement: ElementId | null = null
+let myAuraUntil = 0
 
 // Minimal shape of a game channel: LanChannel (Cloudflare + LAN relay) satisfies it.
 export interface ConnLike {
@@ -130,7 +153,10 @@ function startMatch(role: 'host' | 'join') {
   isHostRole = role === 'host'
   remotePlayer.active = true
   pendingRemoteShots.length = 0
-  useGameStore.getState().startVersus(useVersusStore.getState().myRifle)
+  const weapons = useVersusStore.getState().myWeapons
+  useGameStore.getState().startVersus(weapons[0], weapons[1])
+  myAuraElement = null
+  myAuraUntil = 0
   useVersusStore.getState().patch({
     phase: 'playing',
     step: '',
@@ -142,6 +168,7 @@ function startMatch(role: 'host' | 'join') {
     result: null,
     invincibleUntil: performance.now() + SPAWN_SHIELD_MS,
     remoteInvincible: false,
+    myAura: null,
   })
   playerMotion.pendingSpawn = mySpawn()
 }
@@ -162,17 +189,34 @@ function onPeerGone() {
   }
 }
 
-function applyHit(damage: number) {
+function applyHit(damage: number, element: ElementId) {
   const v = useVersusStore.getState()
   if (v.phase !== 'playing') return
-  if (performance.now() < v.invincibleUntil) return
-  const hp = Math.max(0, v.myHp - damage)
+  const now = performance.now()
+  if (now < v.invincibleUntil) return
+
+  if (myAuraUntil < now) myAuraElement = null
+  const attached = myAuraElement
+  const reaction = attached && attached !== element ? resolveReaction(attached, element) : null
+  let dealt = damage
+  if (reaction) {
+    dealt = Math.round(damage * reaction.multiplier)
+    myAuraElement = null
+    myAuraUntil = 0
+  } else {
+    myAuraElement = element
+    myAuraUntil = now + AURA_MS
+  }
+
+  const hp = Math.max(0, v.myHp - dealt)
   if (hp > 0) {
-    v.patch({ myHp: hp })
+    v.patch({ myHp: hp, myAura: myAuraElement })
     return
   }
   // I died: the remote player wins this round.
-  v.patch({ myHp: 0 })
+  myAuraElement = null
+  myAuraUntil = 0
+  v.patch({ myHp: 0, myAura: null })
   send({ t: 'died', round: v.round })
   const remoteWins = v.remoteWins + 1
   if (remoteWins >= VERSUS_WINS_NEEDED) {
@@ -185,6 +229,7 @@ function applyHit(damage: number) {
     round: v.round + 1,
     myHp: VERSUS_HP,
     invincibleUntil: performance.now() + SPAWN_SHIELD_MS,
+    myAura: null,
   })
   playerMotion.pendingSpawn = mySpawn()
 }
@@ -203,14 +248,19 @@ function onRemoteDied(round: number) {
     return
   }
   // I won the round: heal to full, stay where I am. Remote respawns on their side.
-  v.patch({ myWins, round: v.round + 1, myHp: VERSUS_HP, remoteHp: VERSUS_HP })
+  myAuraElement = null
+  myAuraUntil = 0
+  v.patch({ myWins, round: v.round + 1, myHp: VERSUS_HP, remoteHp: VERSUS_HP, myAura: null })
 }
 
 function onMessage(msg: VersusMessage, role: 'host' | 'join') {
   const v = useVersusStore.getState()
   switch (msg.t) {
     case 'hello':
-      v.patch({ remoteRifle: msg.rifle })
+      v.patch({
+        remoteWeapons: msg.weapons,
+        remoteWeapon: msg.weapons[0],
+      })
       startMatch(role)
       break
     case 's': {
@@ -225,15 +275,16 @@ function onMessage(msg: VersusMessage, role: 'host' | 'join') {
       const part: Partial<VersusStore> = {}
       if (msg.hp !== v.remoteHp) part.remoteHp = msg.hp
       if (msg.inv !== v.remoteInvincible) part.remoteInvincible = msg.inv
+      if (msg.w !== v.remoteWeapon) part.remoteWeapon = msg.w
       if (Object.keys(part).length > 0) v.patch(part)
       break
     }
     case 'shot':
-      pendingRemoteShots.push({ o: msg.o, d: msg.d, el: msg.el })
+      pendingRemoteShots.push({ o: msg.o, d: msg.d, el: msg.el, k: msg.k })
       remoteRecoil.pulse = 1
       break
     case 'hit':
-      applyHit(msg.d)
+      applyHit(msg.d, msg.el)
       break
     case 'died':
       onRemoteDied(msg.round)
@@ -251,7 +302,7 @@ function wireConnection(c: ConnLike, role: 'host' | 'join') {
       clearTimeout(joinTimer)
       joinTimer = null
     }
-    send({ t: 'hello', rifle: useVersusStore.getState().myRifle })
+    send({ t: 'hello', weapons: useVersusStore.getState().myWeapons })
   })
   c.on('data', (data) => onMessage(data as VersusMessage, role))
   c.on('close', () => {
@@ -297,7 +348,7 @@ function cleanupPeer() {
 }
 
 // ---------- Shared relay helpers (Cloudflare internet + LAN wifi) ----------
-function hostViaRelay(rifle: WeaponId, url: string, relayName: string) {
+function hostViaRelay(weapons: VersusLoadout, url: string, relayName: string) {
   cleanupPeer()
   const code = makeCode()
   useVersusStore.getState().patch({
@@ -305,7 +356,7 @@ function hostViaRelay(rifle: WeaponId, url: string, relayName: string) {
     code: '',
     error: '',
     step: `聯絡${relayName}…`,
-    myRifle: rifle,
+    myWeapons: weapons,
     result: null,
   })
   const ws = new WebSocket(url)
@@ -320,7 +371,7 @@ function hostViaRelay(rifle: WeaponId, url: string, relayName: string) {
   }
 }
 
-function joinViaRelay(code: string, rifle: WeaponId, url: string, relayName: string) {
+function joinViaRelay(code: string, weapons: VersusLoadout, url: string, relayName: string) {
   cleanupPeer()
   const clean = code.trim().toLowerCase()
   if (clean.length !== 6) {
@@ -332,7 +383,7 @@ function joinViaRelay(code: string, rifle: WeaponId, url: string, relayName: str
     code: clean,
     error: '',
     step: `聯絡${relayName}…`,
-    myRifle: rifle,
+    myWeapons: weapons,
     result: null,
   })
   const ws = new WebSocket(url)
@@ -354,12 +405,12 @@ function joinViaRelay(code: string, rifle: WeaponId, url: string, relayName: str
 }
 
 // ---------- Internet mode: Cloudflare relay (works across devices) ----------
-export function hostVersus(rifle: WeaponId) {
-  hostViaRelay(rifle, CLOUD_RELAY_URL, '雲端中繼站')
+export function hostVersus(weapons: VersusLoadout) {
+  hostViaRelay(weapons, CLOUD_RELAY_URL, '雲端中繼站')
 }
 
-export function joinVersus(code: string, rifle: WeaponId) {
-  joinViaRelay(code, rifle, CLOUD_RELAY_URL, '雲端中繼站')
+export function joinVersus(code: string, weapons: VersusLoadout) {
+  joinViaRelay(code, weapons, CLOUD_RELAY_URL, '雲端中繼站')
 }
 
 // ---------- Relay channel: wraps a WebSocket so it quacks like a data ----------
@@ -449,12 +500,12 @@ function wireLan(ws: WebSocket, role: 'host' | 'join', relayName: string) {
 }
 
 // ---------- LAN mode (same wifi): through the dev server's built-in relay ----------
-export function hostVersusLan(rifle: WeaponId) {
-  hostViaRelay(rifle, lanWsUrl(), '區網中繼')
+export function hostVersusLan(weapons: VersusLoadout) {
+  hostViaRelay(weapons, lanWsUrl(), '區網中繼')
 }
 
-export function joinVersusLan(code: string, rifle: WeaponId) {
-  joinViaRelay(code, rifle, lanWsUrl(), '區網中繼')
+export function joinVersusLan(code: string, weapons: VersusLoadout) {
+  joinViaRelay(code, weapons, lanWsUrl(), '區網中繼')
 }
 
 export function leaveVersus() {
@@ -477,6 +528,8 @@ export function leaveVersus() {
 export function versusSendState() {
   const v = useVersusStore.getState()
   if (v.phase !== 'playing') return
+  const game = useGameStore.getState()
+  const current = game.loadout?.[game.currentSlot]
   send({
     t: 's',
     p: [playerMotion.x, playerMotion.y, playerMotion.z],
@@ -485,17 +538,23 @@ export function versusSendState() {
     air: playerMotion.airborne,
     hp: v.myHp,
     inv: performance.now() < v.invincibleUntil,
+    w: current?.id ?? v.myWeapons[0],
   })
 }
 
-export function versusSendShot(origin: [number, number, number], dir: [number, number, number], el: ElementId) {
+export function versusSendShot(
+  origin: [number, number, number],
+  dir: [number, number, number],
+  el: ElementId,
+  kind: WeaponKind,
+) {
   if (useVersusStore.getState().phase !== 'playing') return
-  send({ t: 'shot', o: origin, d: dir, el })
+  send({ t: 'shot', o: origin, d: dir, el, k: kind })
 }
 
-export function versusSendHit(damage: number) {
+export function versusSendHit(damage: number, element: ElementId) {
   if (useVersusStore.getState().phase !== 'playing') return
-  send({ t: 'hit', d: damage })
+  send({ t: 'hit', d: damage, el: element })
 }
 
 // Ray-sphere test against the remote player (chest + head). Returns distance

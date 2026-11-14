@@ -5,7 +5,8 @@ import { Group, Mesh } from 'three'
 import { getWeapon } from '../data/weapons.ts'
 import { useGameStore } from '../store/gameStore.ts'
 import type { LoadoutWeapon, WeaponId } from '../types/game.ts'
-import { fitViewmodel, gunUrl } from './weaponModels.ts'
+import { ProceduralWeapon } from './ProceduralWeapon.tsx'
+import { fitViewmodel, gunUrl, hasGunModel } from './weaponModels.ts'
 
 function reloadPose(current: LoadoutWeapon) {
   if (!current.isReloading) {
@@ -56,6 +57,13 @@ for (const id of ['water-rifle', 'thunder-rifle', 'ice-sniper', 'wind-sniper', '
 }
 
 function GunModel({ weaponId }: { weaponId: WeaponId }) {
+  if (!hasGunModel(weaponId)) {
+    return <ProceduralWeapon weaponId={weaponId} />
+  }
+  return <LoadedGunModel weaponId={weaponId} />
+}
+
+function LoadedGunModel({ weaponId }: { weaponId: WeaponId }) {
   const { scene } = useGLTF(gunUrl(weaponId))
   const model = useMemo(() => fitViewmodel(scene, weaponId), [scene, weaponId])
   return <primitive object={model} />

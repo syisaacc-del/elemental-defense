@@ -19,9 +19,10 @@ import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js'
 import { getWeapon } from '../data/weapons.ts'
 import { useGameStore } from '../store/gameStore.ts'
 import type { WeaponId } from '../types/game.ts'
+import { ProceduralWeapon } from './ProceduralWeapon.tsx'
 import { remotePlayer, remoteRecoil, useVersusStore } from './net/peer.ts'
 import { playerMotion } from './playerMotion.ts'
-import { fitViewmodel, gunUrl } from './weaponModels.ts'
+import { fitViewmodel, gunUrl, hasGunModel } from './weaponModels.ts'
 
 const IDLE_URL = `${import.meta.env.BASE_URL}models/player/idle-rifle.fbx`
 const RUN_URL = `${import.meta.env.BASE_URL}models/player/run-rifle.fbx`
@@ -107,6 +108,13 @@ function lerpWeight(action: AnimationAction | null, target: number, delta: numbe
 }
 
 function TpsGun({ weaponId }: { weaponId: WeaponId }) {
+  if (!hasGunModel(weaponId)) {
+    return <ProceduralWeapon weaponId={weaponId} scale={1.35} />
+  }
+  return <LoadedTpsGun weaponId={weaponId} />
+}
+
+function LoadedTpsGun({ weaponId }: { weaponId: WeaponId }) {
   const { scene } = useGLTF(gunUrl(weaponId))
   const model = useMemo(() => {
     const fitted = fitViewmodel(scene, weaponId)
@@ -140,10 +148,10 @@ function FbxCharacter({
   const currentSlot = useGameStore((state) => state.currentSlot)
   const loadout = useGameStore((state) => state.loadout)
   const isAiming = useGameStore((state) => state.isAiming)
-  const versusRifle = useVersusStore((state) => state.remoteRifle)
+  const remoteWeapon = useVersusStore((state) => state.remoteWeapon)
   const shieldOn = useVersusStore((state) => state.remoteInvincible)
   const current = loadout?.[currentSlot]
-  const weapon = remote ? getWeapon(versusRifle) : current ? getWeapon(current.id) : null
+  const weapon = remote ? getWeapon(remoteWeapon) : current ? getWeapon(current.id) : null
 
   const { model, scale } = useMemo(() => {
     const cloned = cloneSkinned(idleFbx) as Group

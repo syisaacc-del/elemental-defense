@@ -12,7 +12,11 @@ export const TPS_DISTANCE = 4.6
 export const TPS_HEIGHT = 2.05
 export const WEAPON_SWITCH_MS = 280
 export const SHOT_RANGE = 160
+export const MELEE_RANGE = 2.85
 export const GRENADE_SPEED = 26
+export const STICKY_SPEED = 22
+export const STICKY_FUSE_MS = 1200
+export const STICKY_STICK_RADIUS = 1.35
 
 export const KILL_SCORE = 10
 export const LEAK_SCORE = -10

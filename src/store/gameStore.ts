@@ -28,7 +28,7 @@ type GameStore = {
   weaponReadyAt: number
   toggleWeapon: (id: WeaponId) => void
   startGame: () => boolean
-  startVersus: (rifle: WeaponId) => void
+  startVersus: (first: WeaponId, second: WeaponId) => void
   switchSlot: (slot: 0 | 1) => void
   cycleWeapon: () => void
   setPointerLocked: (locked: boolean) => void
@@ -123,17 +123,17 @@ export const useGameStore = create<GameStore>((set, get) => ({
     return true
   },
 
-  startVersus: (rifle) => {
+  startVersus: (first, second) => {
     if (get().phase !== 'lobby') return
     set({
       phase: 'playing',
       mode: 'versus',
       score: START_SCORE,
       timeLeft: MATCH_SECONDS,
-      playerHp: 400,
+      playerHp: 800,
       baseHp: START_BASE_HP,
       currentSlot: 0,
-      loadout: [createLoadoutWeapon(rifle), createLoadoutWeapon(rifle)],
+      loadout: [createLoadoutWeapon(first), createLoadoutWeapon(second)],
       isAiming: false,
       cameraMode: 'fps',
       weaponReadyAt: 0,

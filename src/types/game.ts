@@ -1,6 +1,6 @@
 export type ElementId = 'water' | 'thunder' | 'ice' | 'fire' | 'grass' | 'wind'
 
-export type WeaponKind = 'rifle' | 'sniper' | 'launcher'
+export type WeaponKind = 'rifle' | 'sniper' | 'launcher' | 'melee' | 'sticky'
 
 export type GamePhase = 'lobby' | 'playing' | 'ended'
 
@@ -13,6 +13,8 @@ export type WeaponId =
   | 'wind-sniper'
   | 'fire-launcher'
   | 'grass-launcher'
+  | 'ice-knife'
+  | 'fire-sticky'
 
 export type WeaponDef = {
   id: WeaponId

@@ -37,3 +37,20 @@ export function damageEnemiesAt(
   }
   return popups
 }
+
+export function findEnemyNear(x: number, y: number, z: number, radius: number) {
+  let best: EnemyHandle | null = null
+  let bestDist = radius * radius
+  for (const handle of handles.values()) {
+    const pos = handle.getPosition()
+    const dx = pos.x - x
+    const dy = pos.y - y
+    const dz = pos.z - z
+    const d2 = dx * dx + dy * dy + dz * dz
+    if (d2 <= bestDist) {
+      bestDist = d2
+      best = handle
+    }
+  }
+  return best
+}

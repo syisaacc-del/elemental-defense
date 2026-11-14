@@ -102,9 +102,14 @@ export function playShotSound(kind: WeaponKind) {
     playNoise(0.08, 0.2, 2400, 'highpass', 0.08)
     return
   }
-  if (kind === 'launcher') {
+  if (kind === 'launcher' || kind === 'sticky') {
     playThump(70, 28, 0.4, 0.2)
     playNoise(0.14, 0.28, 280, 'lowpass', 0.16)
+    return
+  }
+  if (kind === 'melee') {
+    playNoise(0.06, 0.22, 900, 'bandpass', 0.08)
+    playThump(220, 80, 0.16, 0.06)
     return
   }
   playNoise(0.08, 0.28, 1400, 'highpass', 0.07)

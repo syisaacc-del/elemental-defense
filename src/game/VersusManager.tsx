@@ -36,7 +36,7 @@ export function VersusManager() {
       window.setTimeout(() => {
         setTracers((list) => list.filter((item) => item.id !== id))
       }, 70)
-      playShotSound('rifle')
+      playShotSound(shot.k ?? 'rifle')
     }
 
     sendAcc.current += delta

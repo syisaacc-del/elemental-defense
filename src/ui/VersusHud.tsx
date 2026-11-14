@@ -1,9 +1,21 @@
 import { useEffect, useState } from 'react'
+import { ELEMENT_COLORS } from '../data/elements.ts'
+import { getWeapon } from '../data/weapons.ts'
 import { leaveVersus, useVersusStore, VERSUS_HP, VERSUS_WINS_NEEDED } from '../game/net/peer.ts'
 import { useIsTouch } from '../game/useIsTouch.ts'
 import { formatKey, useSettingsStore } from '../store/settingsStore.ts'
 import { useGameStore } from '../store/gameStore.ts'
+import type { ElementId } from '../types/game.ts'
 import { Crosshair, ReloadHint } from './Hud.tsx'
+
+const AURA_LABEL: Record<ElementId, string> = {
+  water: '水',
+  thunder: '雷',
+  ice: '冰',
+  fire: '火',
+  grass: '草',
+  wind: '风',
+}
 
 function HpBar({ label, hp, color }: { label: string; hp: number; color: string }) {
   const pct = Math.max(0, Math.min(1, hp / VERSUS_HP))
@@ -43,6 +55,9 @@ export function VersusHud() {
   const round = useVersusStore((state) => state.round)
   const result = useVersusStore((state) => state.result)
   const invincibleUntil = useVersusStore((state) => state.invincibleUntil)
+  const myAura = useVersusStore((state) => state.myAura)
+  const loadout = useGameStore((state) => state.loadout)
+  const currentSlot = useGameStore((state) => state.currentSlot)
   const isTouch = useIsTouch()
   const keys = useSettingsStore((state) => state.keys)
   const [now, setNow] = useState(() => performance.now())
@@ -100,7 +115,46 @@ export function VersusHud() {
             无敌 {shieldLeft.toFixed(1)}s
           </div>
         )}
+        {myAura && (
+          <div
+            className="rounded-full border px-4 py-1 text-sm font-bold"
+            style={{
+              borderColor: `${ELEMENT_COLORS[myAura]}88`,
+              background: `${ELEMENT_COLORS[myAura]}22`,
+              color: ELEMENT_COLORS[myAura],
+            }}
+          >
+            身上元素：{AURA_LABEL[myAura]}
+          </div>
+        )}
       </div>
+
+      {loadout && !ended && (
+        <div className="absolute bottom-36 left-1/2 flex -translate-x-1/2 gap-2 md:bottom-8">
+          {loadout.map((item, index) => {
+            const itemWeapon = getWeapon(item.id)
+            const active = index === currentSlot
+            return (
+              <div
+                key={`${item.id}-${index}`}
+                className={`min-w-32 rounded-2xl border px-3 py-2 ${
+                  active ? 'border-cyan-300 bg-cyan-400/15' : 'border-white/10 bg-black/45'
+                }`}
+              >
+                <div className="text-[10px] text-white/50">
+                  {formatKey(index === 0 ? keys.weapon1 : keys.weapon2)} · {itemWeapon.elementLabel}
+                </div>
+                <div className="text-sm font-bold text-white">{itemWeapon.name}</div>
+                <div className="text-xs text-white/65">
+                  {itemWeapon.kind === 'melee'
+                    ? '近战'
+                    : `弹匣 ${item.ammoInMag}/${itemWeapon.magazineSize}`}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
 
       {ended && (
         <div className="pointer-events-auto absolute inset-0 flex items-center justify-center bg-black/60">
