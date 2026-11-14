@@ -11,8 +11,15 @@ export function MobileControls() {
   const cameraMode = useGameStore((state) => state.cameraMode)
 
   useEffect(() => {
-    if (phase !== 'playing') resetTouchInput()
-  }, [phase])
+    if (!isTouch) return
+    if (phase === 'playing') {
+      // 手機冇滑鼠鎖定；當「已經可以操控」處理，否則 tryFire 會拒開槍
+      useGameStore.getState().setPointerLocked(true)
+    } else {
+      useGameStore.getState().setPointerLocked(false)
+      resetTouchInput()
+    }
+  }, [phase, isTouch])
 
   if (!isTouch || phase !== 'playing') return null
 
@@ -21,7 +28,7 @@ export function MobileControls() {
       <LookPad />
       <Joystick />
       <div
-        className="absolute right-4 flex flex-col items-end gap-3"
+        className="pointer-events-auto absolute right-4 flex flex-col items-end gap-3"
         style={{ bottom: 'max(1.5rem, env(safe-area-inset-bottom))' }}
       >
         <div className="flex gap-3">
@@ -78,7 +85,7 @@ function LookPad() {
   return (
     <div
       className="absolute inset-0"
-      style={{ touchAction: 'none' }}
+      style={{ touchAction: 'none', pointerEvents: 'auto' }}
       onPointerDown={(event) => {
         if (pointer.current !== null) return
         pointer.current = event.pointerId
@@ -219,6 +226,7 @@ function HoldButton({
         onHold(false)
       }}
       onPointerCancel={() => onHold(false)}
+      onLostPointerCapture={() => onHold(false)}
     >
       {label}
     </button>

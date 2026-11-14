@@ -178,6 +178,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
   tryFire: (now) => {
     const { phase, loadout, currentSlot, isPointerLocked, weaponReadyAt, beginReload } = get()
+    // 電腦靠 pointer lock；手機版 MobileControls 入局時會 setPointerLocked(true)
     if (phase !== 'playing' || !loadout || !isPointerLocked || now < weaponReadyAt) return null
 
     const current = loadout[currentSlot]
