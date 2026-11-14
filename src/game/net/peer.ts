@@ -1,4 +1,3 @@
-import Peer from 'peerjs'
 import { create } from 'zustand'
 import { useGameStore } from '../../store/gameStore.ts'
 import type { ElementId, WeaponId } from '../../types/game.ts'
@@ -9,12 +8,9 @@ export const VERSUS_HP = 400
 export const VERSUS_WINS_NEEDED = 2
 export const SPAWN_SHIELD_MS = 2000
 
-// STUN：幫兩部機喺互聯網搵對方。同一個 WiFi 玩請用下面嘅區網模式，更穩。
-const PEER_OPTIONS = {
-  config: {
-    iceServers: [{ urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] }],
-  },
-}
+// 互聯網對戰：經 Cloudflare 中繼站轉訊息（唔使兩部機直接穿透路由器）。
+// PeerJS 喺同一部機兩個分頁會通，但跨裝置經常卡喺「建立緊連線」。
+const CLOUD_RELAY_URL = 'wss://elemental-defense-relay.chansheungyin102030.workers.dev/versus-ws'
 
 export type VersusPhase = 'off' | 'hosting' | 'joining' | 'playing' | 'ended'
 export type VersusResult = 'win' | 'lose' | 'left'
@@ -93,8 +89,7 @@ export const useVersusStore = create<VersusStore>((set) => ({
   patch: set,
 }))
 
-// Minimal shape of a game channel: PeerJS DataConnection (internet) and
-// LanChannel (same-wifi) both satisfy it.
+// Minimal shape of a game channel: LanChannel (Cloudflare + LAN relay) satisfies it.
 export interface ConnLike {
   open: boolean
   send: (data: unknown) => void
@@ -102,10 +97,8 @@ export interface ConnLike {
   on: (event: string, cb: (...args: any[]) => void) => void
 }
 
-let peer: Peer | null = null
 let conn: ConnLike | null = null
 let started = false
-let hostRetries = 0
 let joinTimer: ReturnType<typeof setTimeout> | null = null
 let lanWs: WebSocket | null = null
 let lanTimer: ReturnType<typeof setTimeout> | null = null
@@ -296,146 +289,14 @@ function cleanupPeer() {
     }
     conn = null
   }
-  if (peer) {
-    try {
-      peer.destroy()
-    } catch {
-      // ignore
-    }
-    peer = null
-  }
   started = false
   isHostRole = false
-  hostRetries = 0
   remotePlayer.active = false
   pendingRemoteShots.length = 0
   remoteRecoil.pulse = 0
 }
 
-function wireHostPeer(p: Peer) {
-  p.on('open', () => {
-    if (p.id) useVersusStore.getState().patch({ code: p.id, step: '' })
-  })
-  p.on('connection', (c) => {
-    if (conn && conn.open) {
-      c.on('open', () => c.close())
-      return
-    }
-    wireConnection(c as unknown as ConnLike, 'host')
-  })
-  p.on('disconnected', () => {
-    if (peer !== p || started) return
-    try {
-      p.reconnect()
-    } catch {
-      // ignore
-    }
-  })
-  p.on('error', (err) => {
-    if (peer !== p) return
-    const v = useVersusStore.getState()
-    if (v.phase !== 'hosting' || started) return
-    const type = (err as { type?: string }).type ?? ''
-    if (
-      type === 'unavailable-id' ||
-      type === 'network' ||
-      type === 'server-error' ||
-      type === 'socket-error' ||
-      type === 'socket-closed'
-    ) {
-      if (hostRetries < 4) {
-        hostRetries += 1
-        try {
-          p.destroy()
-        } catch {
-          // ignore
-        }
-        if (peer === p) peer = null
-        registerHost()
-        return
-      }
-    }
-    useVersusStore.getState().patch({ phase: 'off', error: '開房失敗，請再試一次', step: '' })
-  })
-}
-
-function registerHost() {
-  const p = new Peer(makeCode(), PEER_OPTIONS)
-  peer = p
-  wireHostPeer(p)
-}
-
-// ---------- Internet mode: PeerJS ----------
-export function hostVersus(rifle: WeaponId) {
-  cleanupPeer()
-  useVersusStore.getState().patch({
-    phase: 'hosting',
-    code: '',
-    error: '',
-    step: '聯絡配對伺服器…',
-    myRifle: rifle,
-    result: null,
-  })
-  registerHost()
-}
-
-export function joinVersus(code: string, rifle: WeaponId) {
-  cleanupPeer()
-  const clean = code.trim().toLowerCase()
-  if (clean.length !== 6) {
-    useVersusStore.getState().patch({ error: '房碼係 6 個字元' })
-    return
-  }
-  useVersusStore.getState().patch({
-    phase: 'joining',
-    code: clean,
-    error: '',
-    step: '聯絡配對伺服器…',
-    myRifle: rifle,
-    result: null,
-  })
-  const p = new Peer(PEER_OPTIONS)
-  peer = p
-  p.on('open', () => {
-    useVersusStore.getState().patch({ step: '搵到伺服器，建立緊連線…' })
-    const c = p.connect(clean, { reliable: true })
-    wireConnection(c as unknown as ConnLike, 'join')
-    joinTimer = setTimeout(() => {
-      if (!started) {
-        const stuckAt = useVersusStore.getState().step
-        cleanupPeer()
-        useVersusStore.getState().patch({
-          phase: 'off',
-          step: '',
-          error: `連接超時（卡喺：${stuckAt}）。叫房主撳「取消」再開一次房，用新碼再試；兩邊都要重新整理頁面`,
-        })
-      }
-    }, 20000)
-  })
-  p.on('disconnected', () => {
-    if (peer !== p || started) return
-    try {
-      p.reconnect()
-    } catch {
-      // ignore
-    }
-  })
-  p.on('error', (err) => {
-    if (peer !== p || started) return
-    const type = (err as { type?: string }).type ?? ''
-    if (type === 'peer-unavailable') {
-      useVersusStore.getState().patch({
-        phase: 'off',
-        step: '',
-        error: '搵唔到呢個房：檢查下房碼啱唔啱，或者叫房主開多次房攞個新碼',
-      })
-    } else {
-      useVersusStore.getState().patch({ phase: 'off', step: '', error: '連線伺服器出錯，請再試一次' })
-    }
-  })
-}
-
-// ---------- LAN helpers (same wifi, through the dev server's relay) ----------
+// ---------- Shared relay helpers (Cloudflare internet + LAN wifi) ----------
 function hostViaRelay(rifle: WeaponId, url: string, relayName: string) {
   cleanupPeer()
   const code = makeCode()
@@ -490,6 +351,15 @@ function joinViaRelay(code: string, rifle: WeaponId, url: string, relayName: str
   ws.onerror = () => {
     useVersusStore.getState().patch({ phase: 'off', step: '', error: `連唔到${relayName}，請再試一次` })
   }
+}
+
+// ---------- Internet mode: Cloudflare relay (works across devices) ----------
+export function hostVersus(rifle: WeaponId) {
+  hostViaRelay(rifle, CLOUD_RELAY_URL, '雲端中繼站')
+}
+
+export function joinVersus(code: string, rifle: WeaponId) {
+  joinViaRelay(code, rifle, CLOUD_RELAY_URL, '雲端中繼站')
 }
 
 // ---------- Relay channel: wraps a WebSocket so it quacks like a data ----------
