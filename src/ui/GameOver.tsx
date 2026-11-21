@@ -1,7 +1,9 @@
 import { stopTheme } from '../game/themeMusic.ts'
+import { useT } from '../i18n/index.ts'
 import { useGameStore } from '../store/gameStore.ts'
 
 export function GameOver() {
+  const t = useT()
   const phase = useGameStore((state) => state.phase)
   const score = useGameStore((state) => state.score)
   const kills = useGameStore((state) => state.kills)
@@ -11,8 +13,8 @@ export function GameOver() {
 
   if (phase !== 'ended') return null
 
-  const title = endReason === 'time' ? '时间到' : '分数耗尽'
-  const summary = endReason === 'time' ? '5 分钟防守结束。' : '基地没守住，分数掉到 0 以下了。'
+  const title = endReason === 'time' ? t('gameover.time') : t('gameover.score')
+  const summary = endReason === 'time' ? t('gameover.timeSummary') : t('gameover.scoreSummary')
 
   return (
     <div className="absolute inset-0 z-30 flex items-center justify-center bg-slate-950/80 px-4">
@@ -22,9 +24,9 @@ export function GameOver() {
         <p className="mt-3 text-white/65">{summary}</p>
 
         <div className="mt-6 grid grid-cols-3 gap-3">
-          <Stat label="最终分数" value={String(score)} />
-          <Stat label="击杀" value={String(kills)} />
-          <Stat label="漏防" value={String(leaks)} />
+          <Stat label={t('gameover.finalScore')} value={String(score)} />
+          <Stat label={t('gameover.kills')} value={String(kills)} />
+          <Stat label={t('gameover.leaks')} value={String(leaks)} />
         </div>
 
         <button
@@ -35,7 +37,7 @@ export function GameOver() {
           }}
           className="mt-8 rounded-full bg-cyan-400 px-8 py-3 text-lg font-bold text-slate-950 hover:bg-cyan-300"
         >
-          返回大厅
+          {t('gameover.back')}
         </button>
       </div>
     </div>

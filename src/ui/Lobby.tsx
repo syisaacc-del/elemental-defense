@@ -3,13 +3,17 @@ import { MATCH_SECONDS, WEAPON_LIST, getWeapon } from '../data/weapons.ts'
 import { playTheme } from '../game/themeMusic.ts'
 import { formatTime } from '../game/formatTime.ts'
 import { useIsTouch } from '../game/useIsTouch.ts'
+import { localizedWeapon, useT } from '../i18n/index.ts'
 import { formatKey, useSettingsStore } from '../store/settingsStore.ts'
 import { useGameStore } from '../store/gameStore.ts'
 import type { WeaponDef } from '../types/game.ts'
 import { MultiplayerMenu } from './MultiplayerMenu.tsx'
 
 function WeaponCard({ weapon, selected, locked }: { weapon: WeaponDef; selected: boolean; locked: boolean }) {
+  const t = useT()
+  const language = useSettingsStore((state) => state.language)
   const toggleWeapon = useGameStore((state) => state.toggleWeapon)
+  const local = localizedWeapon(weapon, language)
 
   return (
     <button
@@ -29,24 +33,24 @@ function WeaponCard({ weapon, selected, locked }: { weapon: WeaponDef; selected:
           className="rounded-full px-3 py-1 text-sm font-semibold"
           style={{ background: `${weapon.accent}22`, color: weapon.accent }}
         >
-          {weapon.elementLabel}元素
+          {local.elementTag}
         </span>
-        <span className="text-xs text-white/60">{weapon.kindLabel}</span>
+        <span className="text-xs text-white/60">{local.kindLabel}</span>
       </div>
-      <h3 className="mb-1 text-base font-bold text-white md:text-lg">{weapon.name}</h3>
-      <p className="mb-3 text-sm text-white/65 md:mb-4">{weapon.description}</p>
+      <h3 className="mb-1 text-base font-bold text-white md:text-lg">{local.name}</h3>
+      <p className="mb-3 text-sm text-white/65 md:mb-4">{local.description}</p>
       <div className="grid grid-cols-3 gap-2 text-center text-xs text-white/75">
         <div className="rounded-lg bg-black/30 px-2 py-2">
-          <div className="text-white/45">弹匣</div>
+          <div className="text-white/45">{t('card.mag')}</div>
           <div className="mt-1 text-sm font-semibold text-white">{weapon.magazineSize}</div>
         </div>
         <div className="rounded-lg bg-black/30 px-2 py-2">
-          <div className="text-white/45">伤害</div>
+          <div className="text-white/45">{t('card.damage')}</div>
           <div className="mt-1 text-sm font-semibold text-white">{weapon.damage}</div>
         </div>
         <div className="rounded-lg bg-black/30 px-2 py-2">
-          <div className="text-white/45">射速</div>
-          <div className="mt-1 text-sm font-semibold text-white">{weapon.fireRate}/秒</div>
+          <div className="text-white/45">{t('card.rate')}</div>
+          <div className="mt-1 text-sm font-semibold text-white">{t('card.rateUnit', { n: weapon.fireRate })}</div>
         </div>
       </div>
     </button>
@@ -54,6 +58,8 @@ function WeaponCard({ weapon, selected, locked }: { weapon: WeaponDef; selected:
 }
 
 export function Lobby() {
+  const t = useT()
+  const language = useSettingsStore((state) => state.language)
   const phase = useGameStore((state) => state.phase)
   const score = useGameStore((state) => state.score)
   const selectedWeaponIds = useGameStore((state) => state.selectedWeaponIds)
@@ -65,25 +71,25 @@ export function Lobby() {
 
   if (phase !== 'lobby') return null
 
-  const selectedWeapons = selectedWeaponIds.map((id) => getWeapon(id))
+  const selectedWeapons = selectedWeaponIds.map((id) => localizedWeapon(getWeapon(id), language))
   const canStart = selectedWeaponIds.length === 2
 
   return (
     <div className="absolute inset-0 z-20 overflow-y-auto overscroll-contain bg-slate-950/72 px-4 py-6 backdrop-blur-sm [touch-action:pan-y]">
       <div className="mx-auto flex min-h-full max-w-6xl flex-col justify-center">
         <div className="mb-6 text-center">
-          <p className="mb-2 text-sm tracking-[0.4em] text-cyan-200/80">ELEMENTAL DEFENSE</p>
-          <h1 className="text-4xl font-black text-white md:text-5xl">元素防线</h1>
-          <p className="mt-3 text-white/70">选出 2 把武器，守住 T 形地图底部的大塔。击杀 +10 分，漏进大塔 -10 分。</p>
+          <p className="mb-2 text-sm tracking-[0.4em] text-cyan-200/80">{t('lobby.tag')}</p>
+          <h1 className="text-4xl font-black text-white md:text-5xl">{t('lobby.title')}</h1>
+          <p className="mt-3 text-white/70">{t('lobby.blurb')}</p>
         </div>
 
         <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-4">
-          <Stat label="当前分数" value={String(score)} />
-          <Stat label="剩余时间" value={formatTime(MATCH_SECONDS)} />
-          <Stat label="已选武器" value={`${selectedWeaponIds.length} / 2`} />
+          <Stat label={t('lobby.score')} value={String(score)} />
+          <Stat label={t('lobby.time')} value={formatTime(MATCH_SECONDS)} />
+          <Stat label={t('lobby.picked')} value={`${selectedWeaponIds.length} / 2`} />
           <Stat
-            label="出战组合"
-            value={selectedWeapons.length ? selectedWeapons.map((item) => item.elementLabel).join(' + ') : '未选择'}
+            label={t('lobby.loadout')}
+            value={selectedWeapons.length ? selectedWeapons.map((item) => item.elementLabel).join(' + ') : t('lobby.none')}
           />
         </div>
 
@@ -117,22 +123,23 @@ export function Lobby() {
                 : 'cursor-not-allowed bg-white/15 text-white/40'
             }`}
           >
-            开始游戏
+            {t('lobby.start')}
           </button>
           <button
             type="button"
             onClick={() => setShowMultiplayer(true)}
             className="rounded-full border border-fuchsia-300/50 bg-fuchsia-400/15 px-10 py-3 text-lg font-bold text-fuchsia-100 transition hover:bg-fuchsia-400/25"
           >
-            多人对战（1v1）
+            {t('lobby.versus')}
           </button>
           <p className="text-sm text-white/55">
-            {canStart
-              ? isTouch
-                ? '点开始后，左边摇杆走路，右边滑动转头，按住开枪。'
-                : `点击后进入战场。按住左键开枪，换两把枪轮流打可触发元素反应。右键瞄准，${formatKey(keys.walk)} 慢走，${formatKey(keys.camera)} 切换人称，${formatKey(keys.menu)} 打开设定。`
-              : '请先点选 2 张不同的武器卡片。'}
+            {canStart ? (isTouch ? t('lobby.hintTouch') : t('lobby.hintPc')) : t('mp.pickTwo')}
           </p>
+          {!isTouch && canStart && (
+            <p className="text-xs text-white/40">
+              {formatKey(keys.walk)} / {formatKey(keys.camera)} / {formatKey(keys.menu)}
+            </p>
+          )}
         </div>
       </div>
       {showMultiplayer && <MultiplayerMenu onClose={() => setShowMultiplayer(false)} />}

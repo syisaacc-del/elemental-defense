@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import { addLook, resetTouchInput, touchInput } from '../game/touchInput.ts'
 import { useIsTouch } from '../game/useIsTouch.ts'
+import { useT } from '../i18n/index.ts'
 import { useGameStore } from '../store/gameStore.ts'
 
 export function MobileControls() {
+  const t = useT()
   const isTouch = useIsTouch()
   const phase = useGameStore((state) => state.phase)
   const currentSlot = useGameStore((state) => state.currentSlot)
@@ -33,11 +35,11 @@ export function MobileControls() {
       >
         <div className="flex gap-3">
           <ActionButton
-            label={cameraMode === 'fps' ? '第三人称' : '第一人称'}
+            label={cameraMode === 'fps' ? t('mobile.tps') : t('mobile.fps')}
             onPress={() => useGameStore.getState().toggleCameraMode()}
           />
           <ActionButton
-            label="换弹"
+            label={t('mobile.reload')}
             onPress={() => useGameStore.getState().beginReload(performance.now())}
           />
         </div>
@@ -53,7 +55,7 @@ export function MobileControls() {
             onPress={() => useGameStore.getState().switchSlot(1)}
           />
           <HoldButton
-            label="跳"
+            label={t('mobile.jump')}
             onHold={(held) => {
               touchInput.jump = held
             }}
@@ -61,12 +63,12 @@ export function MobileControls() {
         </div>
         <div className="mt-1 flex items-end gap-4">
           <HoldButton
-            label="瞄准"
+            label={t('mobile.aim')}
             active={isAiming}
             onHold={(held) => useGameStore.getState().setAiming(held)}
           />
           <HoldButton
-            label="开枪"
+            label={t('mobile.fire')}
             large
             onHold={(held) => {
               touchInput.firing = held

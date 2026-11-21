@@ -3,10 +3,13 @@ import { RELOAD_SECONDS, getWeapon } from '../data/weapons.ts'
 import { SNIPER_ZOOM } from '../game/constants.ts'
 import { formatTime } from '../game/formatTime.ts'
 import { useIsTouch } from '../game/useIsTouch.ts'
+import { localizedWeapon, useT } from '../i18n/index.ts'
 import { formatKey, useSettingsStore } from '../store/settingsStore.ts'
 import { useGameStore } from '../store/gameStore.ts'
 
 export function Hud() {
+  const t = useT()
+  const language = useSettingsStore((state) => state.language)
   const phase = useGameStore((state) => state.phase)
   const mode = useGameStore((state) => state.mode)
   const score = useGameStore((state) => state.score)
@@ -35,10 +38,14 @@ export function Hud() {
       {!isTouch && !isPointerLocked && (
         <div className="absolute inset-0 flex items-center justify-center bg-black/35">
           <div className="rounded-2xl border border-white/15 bg-black/60 px-8 py-5 text-center">
-            <p className="text-xl font-bold text-white">点击画面开始操控</p>
+            <p className="text-xl font-bold text-white">{t('hud.clickToPlay')}</p>
             <p className="mt-2 text-sm text-white/65">
-              按住左键开枪 · 右键瞄准 · {formatKey(keys.walk)} 慢走 · {formatKey(keys.camera)}{' '}
-              切换人称 · {formatKey(keys.reload)} 换弹 · {formatKey(keys.menu)} 设定
+              {t('hud.controls', {
+                walk: formatKey(keys.walk),
+                camera: formatKey(keys.camera),
+                reload: formatKey(keys.reload),
+                menu: formatKey(keys.menu),
+              })}
             </p>
           </div>
         </div>
@@ -48,20 +55,20 @@ export function Hud() {
       {(isTouch || isPointerLocked) && !showScope && <Crosshair />}
 
       <div className="absolute left-2 top-2 flex max-w-[78%] flex-wrap gap-1.5 md:left-6 md:top-6 md:gap-3">
-        <HudChip label="分数" value={String(score)} />
-        <HudChip label="剩余时间" value={formatTime(timeLeft)} />
-        <HudChip label="玩家" value={`${playerHp}`} />
-        <HudChip label="基地" value={`${baseHp}`} />
-        <HudChip label="击杀" value={String(kills)} />
-        <HudChip label="漏防" value={String(leaks)} />
-        <HudChip label="视角" value={cameraMode === 'fps' ? '第一人称' : '第三人称'} />
+        <HudChip label={t('hud.score')} value={String(score)} />
+        <HudChip label={t('hud.time')} value={formatTime(timeLeft)} />
+        <HudChip label={t('hud.player')} value={`${playerHp}`} />
+        <HudChip label={t('hud.base')} value={`${baseHp}`} />
+        <HudChip label={t('hud.kills')} value={String(kills)} />
+        <HudChip label={t('hud.leaks')} value={String(leaks)} />
+        <HudChip label={t('hud.view')} value={cameraMode === 'fps' ? t('hud.fps') : t('hud.tps')} />
       </div>
 
       <ReloadHint />
 
       <div className="absolute bottom-36 left-1/2 flex -translate-x-1/2 gap-2 md:bottom-8 md:gap-3">
         {loadout.map((item, index) => {
-          const itemWeapon = getWeapon(item.id)
+          const itemWeapon = localizedWeapon(getWeapon(item.id), language)
           const active = index === currentSlot
           return (
             <div
@@ -71,12 +78,12 @@ export function Hud() {
               }`}
             >
               <div className="flex items-center justify-between text-xs text-white/55">
-                <span>按键 {formatKey(index === 0 ? keys.weapon1 : keys.weapon2)}</span>
-                <span>{itemWeapon.elementLabel}元素</span>
+                <span>{formatKey(index === 0 ? keys.weapon1 : keys.weapon2)}</span>
+                <span>{itemWeapon.elementTag}</span>
               </div>
               <div className="mt-1 text-sm font-bold text-white md:text-base">{itemWeapon.name}</div>
               <div className="mt-1 text-sm text-white/70">
-                弹匣 {item.ammoInMag} / {itemWeapon.magazineSize}
+                {t('hud.mag')} {item.ammoInMag} / {itemWeapon.magazineSize}
               </div>
             </div>
           )
@@ -119,6 +126,7 @@ function ScopeOverlay() {
 }
 
 export function ReloadHint() {
+  const t = useT()
   const loadout = useGameStore((state) => state.loadout)
   const currentSlot = useGameStore((state) => state.currentSlot)
   const current = loadout?.[currentSlot]
@@ -137,7 +145,9 @@ export function ReloadHint() {
     const progress = Math.min(1, 1 - remain / RELOAD_SECONDS)
     return (
       <div className="absolute bottom-52 left-1/2 w-56 -translate-x-1/2 text-center md:bottom-36 md:w-64">
-        <div className="mb-2 text-sm font-semibold text-amber-200">换弹中 {remain.toFixed(1)}s</div>
+        <div className="mb-2 text-sm font-semibold text-amber-200">
+          {t('hud.reloading', { sec: remain.toFixed(1) })}
+        </div>
         <div className="h-2 overflow-hidden rounded-full bg-white/15">
           <div className="h-full bg-amber-300" style={{ width: `${progress * 100}%` }} />
         </div>

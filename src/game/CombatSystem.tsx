@@ -1,6 +1,6 @@
 import { Line } from '@react-three/drei'
 import { useFrame, useThree } from '@react-three/fiber'
-import { BallCollider, RigidBody, useRapier } from '@react-three/rapier'
+import { BallCollider, RigidBody, interactionGroups, useRapier } from '@react-three/rapier'
 import type { RapierRigidBody } from '@react-three/rapier'
 import { useEffect, useRef, useState } from 'react'
 import type { RefObject } from 'react'
@@ -54,6 +54,9 @@ type Burst = {
 
 let nextFxId = 1
 
+// 炸彈只撞地板／障礙（0、2），唔好撞玩家同敵人，否則會擊飛導致鏡頭掉落變黑
+const projectileGroup = interactionGroups(3, [0, 2])
+
 function hitRemoteAt(point: [number, number, number], radius: number, damage: number, element: ElementId) {
   if (!isVersus() || !remotePlayer.active || remotePlayer.invincible) return
   const dx = remotePlayer.x - point[0]
@@ -95,6 +98,7 @@ function GrenadeBody({
       linearVelocity={grenade.velocity}
       gravityScale={0.9}
       ccd
+      collisionGroups={projectileGroup}
       onCollisionEnter={() => {
         if (done.current || performance.now() - born.current < 90) return
         done.current = true
@@ -211,6 +215,7 @@ function StickyBody({
       linearVelocity={grenade.velocity}
       gravityScale={0.85}
       ccd
+      collisionGroups={projectileGroup}
       onCollisionEnter={() => {
         if (done.current || stuck.current || performance.now() - born.current < 70) return
         stuck.current = true
@@ -289,8 +294,14 @@ export function CombatSystem({ playerBody }: { playerBody: RefObject<RapierRigid
   }, [isPointerLocked])
 
   const addBurst = (point: [number, number, number], color: string, scale: number, life: number) => {
+    // 爆炸太近鏡頭時縮細，避免大黑球蓋住成個畫面
+    const dx = point[0] - camera.position.x
+    const dy = point[1] - camera.position.y
+    const dz = point[2] - camera.position.z
+    const near = Math.hypot(dx, dy, dz) < 2.8
+    const safeScale = near ? Math.min(scale, 0.35) : scale
     const id = nextFxId++
-    setBursts((list) => [...list, { id, point, color, scale }])
+    setBursts((list) => [...list, { id, point, color, scale: safeScale }])
     window.setTimeout(() => {
       setBursts((list) => list.filter((item) => item.id !== id))
     }, life)
@@ -462,9 +473,9 @@ export function CombatSystem({ playerBody }: { playerBody: RefObject<RapierRigid
       )}
 
       {bursts.map((burst) => (
-        <mesh key={burst.id} position={burst.point}>
+        <mesh key={burst.id} position={burst.point} renderOrder={2}>
           <sphereGeometry args={[burst.scale, 12, 12]} />
-          <meshBasicMaterial color={burst.color} transparent opacity={0.55} />
+          <meshBasicMaterial color={burst.color} transparent opacity={0.35} depthWrite={false} />
         </mesh>
       ))}
     </>

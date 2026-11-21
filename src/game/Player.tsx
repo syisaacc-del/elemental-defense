@@ -94,6 +94,12 @@ export function Player() {
 
     body.current.setLinvel({ x: wish.x, y: paused ? 0 : velocity.y, z: wish.z }, true)
 
+    // 防止炸彈／物理異常把人射穿地圖，鏡頭跟住掉落變全黑
+    if (position.y < -8 || !Number.isFinite(position.x) || !Number.isFinite(position.y)) {
+      body.current.setTranslation({ x: PLAYER_START[0], y: PLAYER_START[1], z: PLAYER_START[2] }, true)
+      body.current.setLinvel({ x: 0, y: 0, z: 0 }, true)
+    }
+
     const origin = { x: position.x, y: position.y, z: position.z }
     const ray = new rapier.Ray(origin, { x: 0, y: -1, z: 0 })
     const hit = world.castRay(ray, 1.15, false, undefined, undefined, undefined, body.current)

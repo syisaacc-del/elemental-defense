@@ -1,7 +1,9 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
+import type { AppLanguage } from '../i18n/types.ts'
 
 export type GraphicsQuality = 'low' | 'medium' | 'high'
+export type { AppLanguage }
 
 export type KeyAction =
   | 'forward'
@@ -32,24 +34,41 @@ export const DEFAULT_KEYS: Record<KeyAction, string> = {
   menu: 'KeyO',
 }
 
+export const KEY_LABEL_KEYS: Record<KeyAction, string> = {
+  forward: 'key.forward',
+  backward: 'key.backward',
+  left: 'key.left',
+  right: 'key.right',
+  jump: 'key.jump',
+  walk: 'key.walk',
+  reload: 'key.reload',
+  camera: 'key.camera',
+  weapon1: 'key.weapon1',
+  weapon2: 'key.weapon2',
+  cycle: 'key.cycle',
+  menu: 'key.menu',
+}
+
+/** @deprecated 用 KEY_LABEL_KEYS + i18n；保留俾舊引用唔即死 */
 export const KEY_LABELS: Record<KeyAction, string> = {
-  forward: '前进',
-  backward: '后退',
+  forward: '前進',
+  backward: '後退',
   left: '左移',
   right: '右移',
-  jump: '跳跃',
+  jump: '跳躍',
   walk: '慢走',
-  reload: '换弹',
-  camera: '切换人称',
+  reload: '換彈',
+  camera: '切換人稱',
   weapon1: '武器 1',
   weapon2: '武器 2',
-  cycle: '切换武器',
-  menu: '打开设定',
+  cycle: '切換武器',
+  menu: '打開設定',
 }
 
 const BLOCKED_REBIND = new Set(['Escape', 'Tab', 'MetaLeft', 'MetaRight', 'F5', 'F11', 'F12'])
 
 type SettingsState = {
+  language: AppLanguage
   musicVolume: number
   sfxVolume: number
   quality: GraphicsQuality
@@ -57,6 +76,7 @@ type SettingsState = {
   fov: number
   keys: Record<KeyAction, string>
   settingsOpen: boolean
+  setLanguage: (value: AppLanguage) => void
   setMusicVolume: (value: number) => void
   setSfxVolume: (value: number) => void
   setQuality: (value: GraphicsQuality) => void
@@ -96,12 +116,15 @@ export function canRebindKey(code: string) {
 
 type PersistedSettings = Pick<
   SettingsState,
-  'musicVolume' | 'sfxVolume' | 'quality' | 'mouseSensitivity' | 'fov' | 'keys'
+  'language' | 'musicVolume' | 'sfxVolume' | 'quality' | 'mouseSensitivity' | 'fov' | 'keys'
 >
+
+const LANGS = new Set<AppLanguage>(['zh-Hant', 'zh-Hans', 'en'])
 
 export const useSettingsStore = create<SettingsState>()(
   persist(
     (set, get) => ({
+      language: 'zh-Hant',
       musicVolume: 0.55,
       sfxVolume: 1,
       quality: 'high',
@@ -110,6 +133,7 @@ export const useSettingsStore = create<SettingsState>()(
       keys: { ...DEFAULT_KEYS },
       settingsOpen: false,
 
+      setLanguage: (value) => set({ language: LANGS.has(value) ? value : 'zh-Hant' }),
       setMusicVolume: (value) => set({ musicVolume: clamp(value, 0, 1) }),
       setSfxVolume: (value) => set({ sfxVolume: clamp(value, 0, 1) }),
       setQuality: (value) => set({ quality: value }),
@@ -128,6 +152,7 @@ export const useSettingsStore = create<SettingsState>()(
 
       resetSettings: () =>
         set({
+          language: 'zh-Hant',
           musicVolume: 0.55,
           sfxVolume: 1,
           quality: 'high',
@@ -150,6 +175,7 @@ export const useSettingsStore = create<SettingsState>()(
     {
       name: 'elemental-defense-settings',
       partialize: (state): PersistedSettings => ({
+        language: state.language,
         musicVolume: state.musicVolume,
         sfxVolume: state.sfxVolume,
         quality: state.quality,
@@ -159,9 +185,11 @@ export const useSettingsStore = create<SettingsState>()(
       }),
       merge: (persisted, current) => {
         const saved = (persisted ?? {}) as Partial<PersistedSettings>
+        const language = saved.language && LANGS.has(saved.language) ? saved.language : 'zh-Hant'
         return {
           ...current,
           ...saved,
+          language,
           keys: { ...DEFAULT_KEYS, ...saved.keys },
           settingsOpen: false,
         }

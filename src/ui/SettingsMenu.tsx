@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
+import { LANGUAGE_OPTIONS, useT } from '../i18n/index.ts'
 import { resetTouchInput } from '../game/touchInput.ts'
 import {
-  KEY_LABELS,
+  KEY_LABEL_KEYS,
   canRebindKey,
   formatKey,
   useSettingsStore,
@@ -10,16 +11,12 @@ import {
   type KeyAction,
 } from '../store/settingsStore.ts'
 
-const QUALITY_OPTIONS: { id: GraphicsQuality; label: string; hint: string }[] = [
-  { id: 'low', label: '流畅', hint: '更顺，画面较糊' },
-  { id: 'medium', label: '均衡', hint: '中间档' },
-  { id: 'high', label: '清晰', hint: '最清楚' },
-]
-
-const KEY_ORDER = Object.keys(KEY_LABELS) as KeyAction[]
+const KEY_ORDER = Object.keys(KEY_LABEL_KEYS) as KeyAction[]
 
 export function SettingsMenu() {
+  const t = useT()
   const settingsOpen = useSettingsStore((state) => state.settingsOpen)
+  const language = useSettingsStore((state) => state.language)
   const musicVolume = useSettingsStore((state) => state.musicVolume)
   const sfxVolume = useSettingsStore((state) => state.sfxVolume)
   const quality = useSettingsStore((state) => state.quality)
@@ -27,6 +24,12 @@ export function SettingsMenu() {
   const fov = useSettingsStore((state) => state.fov)
   const keys = useSettingsStore((state) => state.keys)
   const [waiting, setWaiting] = useState<KeyAction | null>(null)
+
+  const qualityOptions: { id: GraphicsQuality; label: string; hint: string }[] = [
+    { id: 'low', label: t('settings.quality.low'), hint: t('settings.quality.lowHint') },
+    { id: 'medium', label: t('settings.quality.medium'), hint: t('settings.quality.mediumHint') },
+    { id: 'high', label: t('settings.quality.high'), hint: t('settings.quality.highHint') },
+  ]
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -74,8 +77,8 @@ export function SettingsMenu() {
         type="button"
         onClick={() => useSettingsStore.getState().toggleSettings()}
         className="pointer-events-auto absolute right-3 top-3 flex h-11 w-11 items-center justify-center rounded-2xl border border-white/15 bg-black/60 text-white shadow-lg hover:border-cyan-300 hover:bg-black/75 md:right-6 md:top-6"
-        aria-label="设定"
-        title={`设定（${formatKey(keys.menu)}）`}
+        aria-label={t('settings.open')}
+        title={`${t('settings.open')}（${formatKey(keys.menu)}）`}
       >
         <GearIcon />
         <span className="absolute -bottom-4 text-[10px] font-semibold text-white/55">{formatKey(keys.menu)}</span>
@@ -92,34 +95,53 @@ export function SettingsMenu() {
           >
             <div className="mb-5 flex items-start justify-between gap-3">
               <div>
-                <p className="text-xs tracking-[0.3em] text-cyan-200/80">SETTINGS</p>
-                <h2 className="mt-1 text-2xl font-black text-white">设定</h2>
+                <p className="text-xs tracking-[0.3em] text-cyan-200/80">{t('settings.eyebrow')}</p>
+                <h2 className="mt-1 text-2xl font-black text-white">{t('settings.title')}</h2>
               </div>
               <button
                 type="button"
                 onClick={() => useSettingsStore.getState().setSettingsOpen(false)}
                 className="rounded-full border border-white/15 px-3 py-1.5 text-sm text-white/80 hover:bg-white/10"
               >
-                关闭
+                {t('settings.close')}
               </button>
             </div>
 
-            <Section title="声音">
+            <Section title={t('settings.language')}>
+              <div className="grid grid-cols-3 gap-2">
+                {LANGUAGE_OPTIONS.map((option) => (
+                  <button
+                    key={option.id}
+                    type="button"
+                    onClick={() => useSettingsStore.getState().setLanguage(option.id)}
+                    className={`rounded-2xl border px-2 py-3 text-center text-sm font-bold ${
+                      language === option.id
+                        ? 'border-cyan-300 bg-cyan-400/15 text-white'
+                        : 'border-white/10 bg-white/5 text-white/75 hover:border-white/25'
+                    }`}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            </Section>
+
+            <Section title={t('settings.sound')}>
               <SliderRow
-                label="背景音乐"
+                label={t('settings.music')}
                 value={musicVolume}
                 onChange={(value) => useSettingsStore.getState().setMusicVolume(value)}
               />
               <SliderRow
-                label="开枪 / 换弹"
+                label={t('settings.sfx')}
                 value={sfxVolume}
                 onChange={(value) => useSettingsStore.getState().setSfxVolume(value)}
               />
             </Section>
 
-            <Section title="画面">
+            <Section title={t('settings.graphics')}>
               <div className="grid grid-cols-3 gap-2">
-                {QUALITY_OPTIONS.map((option) => (
+                {qualityOptions.map((option) => (
                   <button
                     key={option.id}
                     type="button"
@@ -136,23 +158,23 @@ export function SettingsMenu() {
                 ))}
               </div>
               <SliderRow
-                label="视野宽窄"
+                label={t('settings.fov')}
                 value={(fov - 60) / 40}
                 display={`${fov}`}
                 onChange={(value) => useSettingsStore.getState().setFov(Math.round(60 + value * 40))}
               />
             </Section>
 
-            <Section title="操作">
+            <Section title={t('settings.controls')}>
               <SliderRow
-                label="鼠标灵敏度"
+                label={t('settings.sensitivity')}
                 value={(mouseSensitivity - 0.2) / 1.8}
                 display={`${Math.round(mouseSensitivity * 100)}%`}
                 onChange={(value) =>
                   useSettingsStore.getState().setMouseSensitivity(Number((0.2 + value * 1.8).toFixed(2)))
                 }
               />
-              <p className="text-xs text-white/45">点按键，再按下你想用的新键。Esc 取消。重复的键会自动对调。</p>
+              <p className="text-xs text-white/45">{t('settings.rebindHint')}</p>
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                 {KEY_ORDER.map((action) => (
                   <button
@@ -165,9 +187,9 @@ export function SettingsMenu() {
                         : 'border-white/10 bg-white/5 hover:border-white/25'
                     }`}
                   >
-                    <span className="text-sm text-white/65">{KEY_LABELS[action]}</span>
+                    <span className="text-sm text-white/65">{t(KEY_LABEL_KEYS[action])}</span>
                     <span className="text-sm font-bold text-white">
-                      {waiting === action ? '按下新键…' : formatKey(keys[action])}
+                      {waiting === action ? t('settings.pressKey') : formatKey(keys[action])}
                     </span>
                   </button>
                 ))}
@@ -179,7 +201,7 @@ export function SettingsMenu() {
               onClick={() => useSettingsStore.getState().resetSettings()}
               className="mt-2 w-full rounded-2xl border border-white/10 py-2.5 text-sm text-white/70 hover:bg-white/10"
             >
-              恢复默认
+              {t('settings.reset')}
             </button>
           </div>
         </div>
