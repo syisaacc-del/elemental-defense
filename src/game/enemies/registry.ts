@@ -54,3 +54,11 @@ export function findEnemyNear(x: number, y: number, z: number, radius: number) {
   }
   return best
 }
+
+export function getEnemy(id: number) {
+  return handles.get(id) ?? null
+}
+
+export function enemyStillAlive(id: number) {
+  return handles.has(id)
+}

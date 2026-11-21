@@ -2,15 +2,15 @@ import { Line } from '@react-three/drei'
 import { useFrame, useThree } from '@react-three/fiber'
 import { BallCollider, RigidBody, interactionGroups, useRapier } from '@react-three/rapier'
 import type { RapierRigidBody } from '@react-three/rapier'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { RefObject } from 'react'
-import { Mesh, PerspectiveCamera, Vector3 } from 'three'
+import { Group, PerspectiveCamera, Vector3 } from 'three'
 import { ELEMENT_COLORS } from '../data/elements.ts'
 import { getWeapon } from '../data/weapons.ts'
 import { useGameStore } from '../store/gameStore.ts'
 import { useSettingsStore } from '../store/settingsStore.ts'
 import type { ElementId, FireResult } from '../types/game.ts'
-import { damageEnemiesAt, findEnemyNear } from './enemies/registry.ts'
+import { damageEnemiesAt, enemyStillAlive, findEnemyNear, getEnemy } from './enemies/registry.ts'
 import { playShotSound } from './combatAudio.ts'
 import { isVersus, remotePlayer, remoteRayHit, versusSendHit, versusSendShot } from './net/peer.ts'
 import { detectTouch, touchInput } from './touchInput.ts'
@@ -115,6 +115,36 @@ function GrenadeBody({
   )
 }
 
+function stickyOffset(id: number): [number, number, number] {
+  // 多粒炸彈黐同一隻時，散開喺身體四周，睇得出係「黐住」
+  const angle = (id * 2.399) % (Math.PI * 2)
+  const lift = 0.35 + (id % 4) * 0.22
+  const radius = 0.48 + (id % 3) * 0.08
+  return [Math.cos(angle) * radius, lift, Math.sin(angle) * radius]
+}
+
+function StickyBombMesh({ color, stuck }: { color: string; stuck: boolean }) {
+  const size = stuck ? 0.18 : 0.11
+  return (
+    <group>
+      <mesh>
+        <sphereGeometry args={[size, 14, 14]} />
+        <meshStandardMaterial color={color} emissive={color} emissiveIntensity={stuck ? 2.2 : 1.2} roughness={0.35} />
+      </mesh>
+      <mesh position={[0, size * 0.95, 0]}>
+        <cylinderGeometry args={[0.028, 0.038, size * 0.75, 8]} />
+        <meshStandardMaterial color="#fbbf24" emissive="#f59e0b" emissiveIntensity={stuck ? 1.6 : 0.7} />
+      </mesh>
+      {stuck && (
+        <mesh rotation={[Math.PI / 2, 0, 0]}>
+          <ringGeometry args={[size * 1.4, size * 1.85, 22]} />
+          <meshBasicMaterial color="#ffcc66" transparent opacity={0.55} depthWrite={false} />
+        </mesh>
+      )}
+    </group>
+  )
+}
+
 function StickyBody({
   grenade,
   onBurst,
@@ -123,12 +153,18 @@ function StickyBody({
   onBurst: (point: [number, number, number], color: string) => void
 }) {
   const body = useRef<RapierRigidBody>(null)
-  const mesh = useRef<Mesh>(null)
+  const visual = useRef<Group>(null)
+  const pulseMesh = useRef<Group>(null)
   const born = useRef(performance.now())
-  const stuck = useRef(false)
+  const stuckAt = useRef(0)
   const done = useRef(false)
-  const followEnemy = useRef<(() => { x: number; y: number; z: number }) | null>(null)
+  const stuckRef = useRef(false)
+  const [stuck, setStuck] = useState(false)
+  const enemyId = useRef<number | null>(null)
   const followRemote = useRef(false)
+  const worldPos = useRef<[number, number, number] | null>(null)
+  const lastPos = useRef<[number, number, number]>([...grenade.origin])
+  const offset = useMemo(() => stickyOffset(grenade.id), [grenade.id])
   const onBurstRef = useRef(onBurst)
   onBurstRef.current = onBurst
 
@@ -138,74 +174,95 @@ function StickyBody({
     onBurstRef.current(point, grenade.color)
   }
 
-  useEffect(() => {
-    const timer = window.setTimeout(() => {
-      if (done.current) return
-      if (followRemote.current) {
-        detonate([remotePlayer.x, remotePlayer.y, remotePlayer.z])
-        return
-      }
-      if (followEnemy.current) {
-        const p = followEnemy.current()
-        detonate([p.x, p.y, p.z])
-        return
-      }
-      const t = body.current?.translation()
-      detonate(t ? [t.x, t.y, t.z] : grenade.origin)
-    }, STICKY_FUSE_MS + 2500)
-    return () => window.clearTimeout(timer)
-  }, [grenade.origin])
+  const beginStick = () => {
+    if (stuckRef.current || done.current) return
+    stuckRef.current = true
+    stuckAt.current = performance.now()
+    setStuck(true)
+  }
 
-  useFrame(() => {
+  useFrame((_, delta) => {
     if (done.current) return
-    const rb = body.current
-    if (!rb) return
 
-    if (stuck.current) {
-      if (followRemote.current) {
-        const p: [number, number, number] = [remotePlayer.x, remotePlayer.y + 0.35, remotePlayer.z]
-        rb.setNextKinematicTranslation({ x: p[0], y: p[1], z: p[2] })
-        if (performance.now() - born.current >= STICKY_FUSE_MS) detonate(p)
+    if (!stuckRef.current) {
+      const rb = body.current
+      if (!rb) return
+      const t = rb.translation()
+      lastPos.current = [t.x, t.y, t.z]
+
+      if (isVersus() && remotePlayer.active) {
+        const dx = remotePlayer.x - t.x
+        const dy = remotePlayer.y - t.y
+        const dz = remotePlayer.z - t.z
+        if (dx * dx + dy * dy + dz * dz <= STICKY_STICK_RADIUS * STICKY_STICK_RADIUS) {
+          followRemote.current = true
+          beginStick()
+          return
+        }
+      }
+
+      const near = findEnemyNear(t.x, t.y, t.z, STICKY_STICK_RADIUS)
+      if (near) {
+        enemyId.current = near.id
+        beginStick()
         return
       }
-      if (followEnemy.current) {
-        const p = followEnemy.current()
-        rb.setNextKinematicTranslation({ x: p.x, y: p.y + 0.45, z: p.z })
-        if (performance.now() - born.current >= STICKY_FUSE_MS) detonate([p.x, p.y, p.z])
-        return
-      }
-      if (performance.now() - born.current >= STICKY_FUSE_MS) {
-        const t = rb.translation()
+
+      if (performance.now() - born.current > 4500) {
         detonate([t.x, t.y, t.z])
       }
       return
     }
 
-    const t = rb.translation()
+    // 已黐住：純視覺跟住目標，唔再行物理（多粒一齊都唔會黑屏）
+    let px = lastPos.current[0]
+    let py = lastPos.current[1]
+    let pz = lastPos.current[2]
 
-    if (isVersus() && remotePlayer.active) {
-      const dx = remotePlayer.x - t.x
-      const dy = remotePlayer.y - t.y
-      const dz = remotePlayer.z - t.z
-      if (dx * dx + dy * dy + dz * dz <= STICKY_STICK_RADIUS * STICKY_STICK_RADIUS) {
-        stuck.current = true
-        followRemote.current = true
-        born.current = performance.now()
-        rb.setLinvel({ x: 0, y: 0, z: 0 }, true)
-        rb.setBodyType(2, true)
+    if (followRemote.current) {
+      px = remotePlayer.x + offset[0]
+      py = remotePlayer.y + offset[1]
+      pz = remotePlayer.z + offset[2]
+    } else if (enemyId.current !== null) {
+      if (!enemyStillAlive(enemyId.current)) {
+        detonate([px, py, pz])
         return
       }
+      const pos = getEnemy(enemyId.current)?.getPosition()
+      if (pos) {
+        px = pos.x + offset[0]
+        py = pos.y + offset[1]
+        pz = pos.z + offset[2]
+      }
+    } else if (worldPos.current) {
+      px = worldPos.current[0]
+      py = worldPos.current[1] + 0.12
+      pz = worldPos.current[2]
     }
 
-    const near = findEnemyNear(t.x, t.y, t.z, STICKY_STICK_RADIUS)
-    if (near) {
-      stuck.current = true
-      followEnemy.current = near.getPosition
-      born.current = performance.now()
-      rb.setLinvel({ x: 0, y: 0, z: 0 }, true)
-      rb.setBodyType(2, true)
+    lastPos.current = [px, py, pz]
+    if (visual.current) {
+      visual.current.position.set(px, py, pz)
+      visual.current.rotation.y += delta * 3.5
+    }
+    const life = (performance.now() - stuckAt.current) / STICKY_FUSE_MS
+    const pulse = 0.5 + 0.5 * Math.sin(life * Math.PI * 10)
+    if (pulseMesh.current) pulseMesh.current.scale.setScalar(1 + pulse * 0.18)
+
+    if (performance.now() - stuckAt.current >= STICKY_FUSE_MS) {
+      detonate([px, py, pz])
     }
   })
+
+  if (stuck) {
+    return (
+      <group ref={visual} position={lastPos.current}>
+        <group ref={pulseMesh}>
+          <StickyBombMesh color={grenade.color} stuck />
+        </group>
+      </group>
+    )
+  }
 
   return (
     <RigidBody
@@ -217,18 +274,14 @@ function StickyBody({
       ccd
       collisionGroups={projectileGroup}
       onCollisionEnter={() => {
-        if (done.current || stuck.current || performance.now() - born.current < 70) return
-        stuck.current = true
-        born.current = performance.now()
-        body.current?.setLinvel({ x: 0, y: 0, z: 0 }, true)
-        body.current?.setBodyType(2, true)
+        if (done.current || stuckRef.current || performance.now() - born.current < 70) return
+        const t = body.current?.translation()
+        worldPos.current = t ? [t.x, t.y, t.z] : [...grenade.origin]
+        beginStick()
       }}
     >
       <BallCollider args={[0.11]} />
-      <mesh ref={mesh}>
-        <sphereGeometry args={[0.11, 12, 12]} />
-        <meshStandardMaterial color={grenade.color} emissive={grenade.color} emissiveIntensity={1.4} />
-      </mesh>
+      <StickyBombMesh color={grenade.color} stuck={false} />
     </RigidBody>
   )
 }
@@ -294,17 +347,21 @@ export function CombatSystem({ playerBody }: { playerBody: RefObject<RapierRigid
   }, [isPointerLocked])
 
   const addBurst = (point: [number, number, number], color: string, scale: number, life: number) => {
-    // 爆炸太近鏡頭時縮細，避免大黑球蓋住成個畫面
+    // 爆炸太近鏡頭／太多叠埋會蓋住成個畫面變黑 → 強制細同限數量
     const dx = point[0] - camera.position.x
     const dy = point[1] - camera.position.y
     const dz = point[2] - camera.position.z
-    const near = Math.hypot(dx, dy, dz) < 2.8
-    const safeScale = near ? Math.min(scale, 0.35) : scale
+    const dist = Math.hypot(dx, dy, dz)
+    if (dist < 1.6) return
+    const safeScale = dist < 4 ? Math.min(scale, 0.28) : Math.min(scale, 0.7)
     const id = nextFxId++
-    setBursts((list) => [...list, { id, point, color, scale: safeScale }])
+    setBursts((list) => {
+      const next = [...list, { id, point, color, scale: safeScale }]
+      return next.length > 4 ? next.slice(next.length - 4) : next
+    })
     window.setTimeout(() => {
       setBursts((list) => list.filter((item) => item.id !== id))
-    }, life)
+    }, Math.min(life, 160))
   }
 
   const spawnShot = (shot: FireResult) => {
@@ -440,7 +497,8 @@ export function CombatSystem({ playerBody }: { playerBody: RefObject<RapierRigid
 
   const burstGrenade = (grenade: Grenade, point: [number, number, number], color: string) => {
     setGrenades((list) => list.filter((item) => item.id !== grenade.id))
-    addBurst(point, color, grenade.sticky ? 1.1 : 1.6, 280)
+    // 黏彈用好細嘅閃光；榴彈都縮細，避免多粒同時爆蓋黑畫面
+    addBurst(point, color, grenade.sticky ? 0.22 : 0.55, grenade.sticky ? 90 : 180)
     hitRemoteAt(point, grenade.radius, grenade.damage, grenade.element)
     damageEnemiesAt(
       { x: point[0], y: point[1], z: point[2] },
@@ -474,8 +532,15 @@ export function CombatSystem({ playerBody }: { playerBody: RefObject<RapierRigid
 
       {bursts.map((burst) => (
         <mesh key={burst.id} position={burst.point} renderOrder={2}>
-          <sphereGeometry args={[burst.scale, 12, 12]} />
-          <meshBasicMaterial color={burst.color} transparent opacity={0.35} depthWrite={false} />
+          <sphereGeometry args={[burst.scale, 10, 10]} />
+          <meshBasicMaterial
+            color={burst.color}
+            transparent
+            opacity={0.28}
+            depthWrite={false}
+            depthTest
+            toneMapped={false}
+          />
         </mesh>
       ))}
     </>
