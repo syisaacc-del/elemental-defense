@@ -37,6 +37,9 @@ export const en: Dict = {
   'key.cycle': 'Swap weapon',
   'key.menu': 'Open settings',
 
+  'intro.skip': 'Skip',
+  'intro.tap': 'Tap to play',
+
   'lobby.tag': 'ELEMENTAL DEFENSE',
   'lobby.title': 'Elemental Defense',
   'lobby.heroBlurb': 'Defend the elemental tower with reactions. Study the codex, then pick your loadout.',

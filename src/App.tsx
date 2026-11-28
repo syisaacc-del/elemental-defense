@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { KeyboardControls } from '@react-three/drei'
 import { GameCanvas } from './game/GameCanvas.tsx'
 import { useCombatSfx } from './game/useCombatSfx.ts'
@@ -9,6 +10,7 @@ import { useSettingsStore } from './store/settingsStore.ts'
 import { FullscreenButton } from './ui/FullscreenButton.tsx'
 import { GameOver } from './ui/GameOver.tsx'
 import { Hud } from './ui/Hud.tsx'
+import { IntroVideo } from './ui/IntroVideo.tsx'
 import { Lobby } from './ui/Lobby.tsx'
 import { MobileControls } from './ui/MobileControls.tsx'
 import { SettingsMenu } from './ui/SettingsMenu.tsx'
@@ -16,6 +18,7 @@ import { VersusHud } from './ui/VersusHud.tsx'
 
 export default function App() {
   const keys = useSettingsStore((state) => state.keys)
+  const [showIntro, setShowIntro] = useState(true)
   useGameLoop()
   useWeaponHotkeys()
   useThemeMusic()
@@ -35,13 +38,14 @@ export default function App() {
     <KeyboardControls key={Object.values(keys).join('-')} map={keyMap}>
       <div className="relative h-full w-full">
         <GameCanvas />
-        <Lobby />
+        {!showIntro && <Lobby />}
         <Hud />
         <VersusHud />
         <MobileControls />
         <GameOver />
         <SettingsMenu />
         <FullscreenButton />
+        {showIntro && <IntroVideo onDone={() => setShowIntro(false)} />}
       </div>
     </KeyboardControls>
   )

@@ -37,6 +37,9 @@ export const zhHant: Dict = {
   'key.cycle': '切換武器',
   'key.menu': '打開設定',
 
+  'intro.skip': '跳過',
+  'intro.tap': '點擊播放',
+
   'lobby.tag': 'ELEMENTAL DEFENSE',
   'lobby.title': '元素防線',
   'lobby.heroBlurb': '守住元素大塔，用元素反應擊退浪潮。戰前先睇圖鑑，出戰再選武器。',
