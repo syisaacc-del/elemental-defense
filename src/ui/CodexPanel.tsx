@@ -22,7 +22,7 @@ export function CodexPanel({ onClose }: { onClose: () => void }) {
 
   return (
     <div
-      className="absolute inset-0 z-30 flex items-end justify-center bg-black/55 px-3 py-4 backdrop-blur-[2px] md:items-center"
+      className="pointer-events-auto absolute inset-0 z-30 flex items-end justify-center bg-black/55 px-3 py-4 backdrop-blur-[2px] md:items-center"
       onClick={onClose}
     >
       <div

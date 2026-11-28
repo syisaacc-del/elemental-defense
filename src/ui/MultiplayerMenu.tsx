@@ -55,7 +55,7 @@ export function MultiplayerMenu({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <div className="absolute inset-0 z-30 flex items-center justify-center bg-slate-950/80 px-3 py-4 backdrop-blur-sm">
+    <div className="pointer-events-auto absolute inset-0 z-30 flex items-center justify-center bg-slate-950/80 px-3 py-4 backdrop-blur-sm">
       <div className="flex max-h-[92vh] w-full max-w-2xl flex-col overflow-hidden rounded-3xl border border-white/10 bg-slate-900/95">
         <div className="shrink-0 border-b border-white/10 px-5 py-4 md:px-7">
           <div className="flex items-start justify-between">
