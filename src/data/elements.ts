@@ -68,6 +68,18 @@ export function mixHex(first: string, second: string) {
   return `#${mix.map((value) => value.toString(16).padStart(2, '0')).join('')}`.toUpperCase()
 }
 
+/** 圖鑑用：列出全部元素反應 */
+export const REACTION_LIST = (Object.entries(REACTION_TABLE) as [string, ReactionDef][]).map(([key, def]) => {
+  const [a, b] = key.split('+') as [ElementId, ElementId]
+  return {
+    a,
+    b,
+    name: def.name,
+    multiplier: def.multiplier,
+    color: def.color ?? mixHex(ELEMENT_COLORS[a], ELEMENT_COLORS[b]),
+  }
+})
+
 export function mixElementColors(first: ElementId, second: ElementId) {
   const reaction = REACTION_TABLE[pairKey(first, second)]
   if (reaction?.color) return reaction.color

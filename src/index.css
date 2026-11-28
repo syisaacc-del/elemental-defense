@@ -30,3 +30,47 @@ canvas {
   height: 100%;
   touch-action: none;
 }
+
+.menu-atmosphere {
+  background:
+    radial-gradient(ellipse 55% 45% at 70% 40%, rgba(46, 212, 255, 0.12), transparent 70%),
+    radial-gradient(ellipse 40% 35% at 20% 70%, rgba(240, 193, 75, 0.1), transparent 65%);
+  animation: menu-breathe 8s ease-in-out infinite;
+}
+
+.menu-fade-in {
+  animation: menu-rise 0.85s ease-out both;
+}
+
+.menu-delay-1 {
+  animation-delay: 0.12s;
+}
+
+.menu-delay-2 {
+  animation-delay: 0.24s;
+}
+
+.menu-cta {
+  animation: menu-rise 0.9s ease-out 0.2s both;
+}
+
+@keyframes menu-rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes menu-breathe {
+  0%,
+  100% {
+    opacity: 0.85;
+  }
+  50% {
+    opacity: 1;
+  }
+}
